@@ -1,128 +1,18 @@
-#include "../therm-cylinder-include/createCylinderDispControl.h"
-#include "TACSShellElementTransform.h"
-#include "TACSMaterialProperties.h"
-#include "TACSIsoShellConstitutive.h"
-#include "TACSShellElementDefs.h"
-#include "TACSBuckling.h"
+#include "2_makeAssembler.h"
+#include "3_linearBuckling.h"
 #include "KSM.h"
 #include "TACSContinuation.h"
-
-void makeAssembler(MPI_Comm comm, double t, double rt, double Lr, double E, double temperature, 
-                   bool urStarBC,
-                   bool ringStiffened, double ringStiffenedRadiusFrac,
-                   int nelems, TACSAssembler **assembler) {
-    double R = t * rt; // m
-    double L = R * Lr;
-    double udisp = 0.0; // ( for r/t = 25 )to be most accurate want udisp about 1/200 to 1/300 the linear buckling disp
-
-    // select nelems and it will select to retain isotropic elements (good element AR)
-    // want dy = 2 * pi * R / ny the hoop elem spacing to be equal dx = L / nx the axial elem spacing
-    // and want to choose # elems so that elements have good elem AR
-    // int nelems = 5000; // prev 3500 // target (does round stuff)
-    double pi = 3.14159265;
-    double A = L / 2.0 / pi / R;
-    double temp1 = sqrt(nelems * 1.0 / A);
-    int ny = (int)temp1;
-    double temp2 = A * ny;
-    int nx = (int)temp2;
-    printf("nx = %d, ny = %d\n", nx, ny);
-
-    TacsScalar rho = 2700.0;
-    TacsScalar specific_heat = 921.096;
-    TacsScalar nu = 0.3;
-    TacsScalar ys = 270.0;
-    TacsScalar cte = 10.0e-6;
-    TacsScalar kappa = 230.0;
-    TACSMaterialProperties *props = new TACSMaterialProperties(rho, specific_heat, E, nu, ys, cte, kappa);
-
-    double urStar = (1 + nu) * cte * R * temperature;
-
-    // TacsScalar axis[] = {1.0, 0.0, 0.0};
-    // TACSShellTransform *transform = new TACSShellRefAxisTransform(axis);
-    TACSShellTransform *transform = new TACSShellNaturalTransform();
-    TACSShellConstitutive *con = new TACSIsoShellConstitutive(props, t);
-
-    TACSCreator *creator = NULL;
-    TACSElement *shell = NULL;
-    // needs to be nonlinear here otherwise solve will terminate immediately
-    shell = new TACSQuad4NonlinearShell(transform, con); 
-    shell->incref();
-
-    // createAssembler(comm, 2, nx, ny, udisp, L, R, 
-    // ringStiffened, ringStiffenedRadiusFrac,
-    // shell, assembler, &creator);
-
-    createAssembler(
-        comm, 2, nx, ny,
-        L, R,
-        urStarBC, urStar,
-        ringStiffened, ringStiffenedRadiusFrac,
-        shell, assembler, &creator
-    );  
-}
-
-double linearBuckling(TACSAssembler *assembler, TACSMat *kmat, TACSSchurPc *pc) {
-    // create the matrices for buckling
-    TACSSchurMat *gmat = assembler->createSchurMat();  // geometric stiffness matrix
-    TACSSchurMat *aux_mat = assembler->createSchurMat();  // auxillary matrix for shift and invert solver
-
-    // optional other preconditioner settings?
-    assembler->assembleMatType(TACS_STIFFNESS_MATRIX, kmat);
-    assembler->assembleMatType(TACS_GEOMETRIC_STIFFNESS_MATRIX, gmat);
-
-    int subspaceSize = 10, nrestarts = 15, isFlexible = 0;
-    GMRES *lbuckle_gmres = new GMRES(aux_mat, pc, subspaceSize, nrestarts, isFlexible);
-    lbuckle_gmres->incref();
-    lbuckle_gmres->setTolerances(1e-12, 1e-12);
-
-    // make the buckling solver
-    int max_lanczos_vecs = 300, num_eigvals = 100; // num_eigvals = 50;
-    double eig_tol = 1e-12;
-    double sigma = 10.0;
-    TACSLinearBuckling *buckling = new TACSLinearBuckling(assembler, sigma,
-                     gmat, kmat, aux_mat, lbuckle_gmres, max_lanczos_vecs, num_eigvals, eig_tol);
-    buckling->incref();
-
-    // make a KSM print object for solving buckling
-    KSMPrint *ksm_print_buckling = new KSMPrintStdout("BucklingAnalysis", 0, 10);
-    ksm_print_buckling->incref();
-
-    // solve the buckling analysis
-    buckling->setSigma(10.0);
-    buckling->solve(NULL, NULL, ksm_print_buckling);
-
-    // compute linear eigval based on initial thermal buckling estimate
-    TacsScalar error;
-    TacsScalar linear_eigval = buckling->extractEigenvalue(0, &error);
-    printf("linear eigval = %.8e\n", linear_eigval);
-
-    // Create an TACSToFH5 object for writing output to files
-    int write_flag = (TACS_OUTPUT_CONNECTIVITY | TACS_OUTPUT_NODES |
-                        TACS_OUTPUT_DISPLACEMENTS | TACS_OUTPUT_STRAINS |
-                        TACS_OUTPUT_STRESSES | TACS_OUTPUT_EXTRAS);
-    TACSToFH5 *f5 = new TACSToFH5(assembler, TACS_BEAM_OR_SHELL_ELEMENT, write_flag);
-    f5->incref();
-
-    // write the linear buckling solution to a file
-    TACSBVec *phi = assembler->createVec();
-    phi->incref();
-    buckling->extractEigenvector(0, phi, &error);
-    assembler->setVariables(phi);   
-    f5->writeToFile("linear-buckle.f5");
-
-    // return the eigenvalue
-    return TacsRealPart(linear_eigval);
-}
+#include "TACSToFH5.h"
 
 void runNonlinearStatic(MPI_Comm comm, 
     double t, double rt, double Lr, 
     double E, double temperature, 
     int nelems, double conv_slope_frac,
     double rtol, double atol,
-    bool urStarBC,
+    bool urStarBC, bool runLinearEigval,
     bool ringStiffened, double ringStiffenedRadiusFrac,
-    int num_imperfections, TacsScalar *imperfection_sizes,
-    TacsScalar *nasaKDF, TacsScalar *tacsKDF
+    int NUM_IMP, TacsScalar *imperfection_sizes,
+    double *linear_eigval, TacsScalar *lambdaNL
     ) {
     
     int rank;
@@ -159,13 +49,13 @@ void runNonlinearStatic(MPI_Comm comm,
 
     // get linear buckling eigenvalue and adjust initial temp
     assembler->setTemperatures(temperature);
-    double linear_eigval = linearBuckling(assembler, kmat, pc);
-    double lambda_adjustment = linear_eigval / 200.0;
+    double lambda_adjustment;
+    if (runLinearEigval) {
+        *linear_eigval = linearBuckling(assembler, kmat, pc, NUM_IMP, imperfection_sizes);
+        lambda_adjustment = *linear_eigval / 200.0;
+    } else {lambda_adjustment = *linear_eigval;}
+    
     // temperature *= linear_eigval / 200.0; // good rule is if the linear buckling is at 200 about zero disps, then do delta_lambda = 5.0
-    // if (fp) {
-    //     fprintf(fp, "linear eigval = %.8e\n", TacsRealPart(linear_eigval));
-    //     fflush(fp);
-    // }
 
     // make the linear solver (GMRES)
     int subspaceSize = 10, nrestarts = 15, isFlexible = 0;
@@ -180,7 +70,12 @@ void runNonlinearStatic(MPI_Comm comm,
     // main output file
     FILE *fp;
     if (rank == 0) {
-        fp = fopen("load-disp.csv", "w");
+        if (runLinearEigval) {
+            fp = fopen("load-disp-perfect.csv", "w");
+        } else {
+            fp = fopen("load-disp-imperfect.csv", "w");
+        }
+        
         if (fp) {
             fprintf(fp, "iter,|u|,lambda/lamLin,minS11,avgS11,maxS11,avgSlopeFrac\n");
             fflush(fp);
@@ -262,7 +157,11 @@ void runNonlinearStatic(MPI_Comm comm,
     // now do load increments and Newton solves here
     // ---------------------------------------------
 
-    for (int iload = 0; iload < 100; iload++) {
+    // do new Newton solve
+    int max_num_restarts = 4;
+    int num_restarts = 0;
+
+    for (int iload = 0; iload < 300; iload++) {
         
         // update the new load factor
         lambda += delta_lambda;
@@ -272,15 +171,16 @@ void runNonlinearStatic(MPI_Comm comm,
         assembler->setVariables(vars);
         assembler->assembleJacobian(1.0, 0.0, 0.0, res, kmat, TACS_MAT_NORMAL, 1.0, lambda);
 
+        old_vars->copyValues(vars);
+
         // outer load increment printout
         if (ksm_print) {
             char line[256];
             sprintf(line, "Outer iteration %3d: t: %9.4f lambda/lamLin %9.4f\n",
-                    iload, MPI_Wtime() - t0, TacsRealPart(lambda/linear_eigval));
+                    iload, MPI_Wtime() - t0, TacsRealPart(lambda / *linear_eigval));
             ksm_print->print(line);
         }
 
-        // do new Newton solve
         for (int inewton = 0; inewton < 100; inewton++) {
             // update nonlinear residual
             assembler->setTemperatures(lambda * temperature); // prob don't need to reset this, but still fine
@@ -309,11 +209,14 @@ void runNonlinearStatic(MPI_Comm comm,
             if (TacsRealPart(res_norm) < target_res_norm) { break; }
 
             // if starting to have trouble to converge, lower delta_lambda and lambda and reduce rtol
-            if (inewton > 30 && inewton % 10 == 0) {
+            if ( TacsRealPart(res_norm) >= 1e4 && inewton >= 5 ) {
                 lambda -= delta_lambda / 2;
                 delta_lambda *= 0.5;
-                rtol = 1e-6; // lower rtol and the step size in load factor
+                rtol *= 10.0;
+                // rtol = 1e-6; // lower rtol and the step size in load factor
                 target_res_norm = rtol * TacsRealPart(res_norm_init) + atol;
+                vars->copyValues(old_vars);
+                num_restarts++;
 
                 // compute and factor the new stiffness matrix
                 assembler->setTemperatures(lambda * temperature);
@@ -321,7 +224,18 @@ void runNonlinearStatic(MPI_Comm comm,
                 assembler->assembleJacobian(1.0, 0.0, 0.0, res, kmat, TACS_MAT_NORMAL, 1.0, lambda);
             }
 
+            if (num_restarts > max_num_restarts) {
+                break;
+            }
+
         } // end of newton iteration for each load step
+
+        if (num_restarts > max_num_restarts) {
+            printf("failed to converge at load step %d", iload);
+            if (fp) {
+                fprintf(fp, "failed to converge at load step %d\n", iload);
+            }
+        }
 
         // update load-displacement curve
         ElementType etype = TACS_BEAM_OR_SHELL_ELEMENT;
@@ -337,18 +251,18 @@ void runNonlinearStatic(MPI_Comm comm,
 
         // TODO : adding slope check
         if (iload == 0) {
-            init_slope = avg_stress / lambda;
+            init_slope = min_stress / lambda;
         } else {
-            c_slope = (avg_stress - avg_stress_old) / delta_lambda;
+            c_slope = (min_stress - min_stress_old) / delta_lambda;
         }
 
-        // save old avg stress for next time
-        avg_stress_old = avg_stress;
+        // save old min stress for next time
+        min_stress_old = min_stress;
 
         // update load-displacement curve output file
         if (fp) {
             // iter, |u|, lambda/lamLin, minS11, avgS11, maxS11, avgSlopeFrac
-            fprintf(fp, "%2d,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e\n", iload+1, TacsRealPart(vars->norm()), TacsRealPart(lambda / linear_eigval),
+            fprintf(fp, "%2d,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e\n", iload+1, TacsRealPart(vars->norm()), TacsRealPart(lambda / *linear_eigval),
             TacsRealPart(min_stress), TacsRealPart(avg_stress), TacsRealPart(max_stress), TacsRealPart(c_slope / init_slope));
             fflush(fp);
         }
@@ -365,56 +279,20 @@ void runNonlinearStatic(MPI_Comm comm,
         const char *cstr_filename = filename.c_str();
         f5->writeToFile(cstr_filename);
 
-
+        if (c_slope < conv_slope_frac && iload > 10) {
+            // significant drop in stiffness and slope to buckling..
+            *lambdaNL = TacsRealPart(lambda / *linear_eigval);
+            break; // exit the nonlinear solve loop
+        }
     } // end of load increment loop
 
-}
-
-int main(int argc, char *argv[]) {
-    MPI_Init(&argc, &argv);
-
-    // Get the rank
-    MPI_Comm comm = MPI_COMM_WORLD;
-
-    double t = 0.002;
-    double rt = 100;
-    double Lr = 2.0;
-    double temperature = 1.0; // K (may have to adjust depending on the)
-    double E = 70e9; // can also try 70e5 since only scales problem
-    double conv_slope_frac = 0.1;
-    // worried that if I scale down too much, won't solve as deeply though.
-
-    // just perfect geometry in this case, can add in imperfections later maybe
-    const int NUM_IMP = 3;
-    TacsScalar imperfections[NUM_IMP] = {0.0 * t, 0.0, 0.0 };
-    // TacsScalar imperfections[NUM_IMP] = {0.5 * t, 0.0, 0.0 };
-    // TacsScalar imperfections[NUM_IMP] = {0.0, 0.0, 0.0 * t }; // not doing imperfections this time
-    bool useEigvals = false; // use load-disp curve for thermal
-    int nelems = 20000; // 20000
-    std::string filePrefix = "";
-    TacsScalar nasaKDF, tacsKDF;
-
-    // attempt to make the BC more realistic and get rid of BL effects..
-    bool urStarBC = false;
-
-    bool ringStiffened = false;
-    double ringStiffenedRadiusFrac = 0.9;
-
-    // tolerances
-    // double rtol = 1e-6, atol = 1e-10; // default
-    double rtol = 1e-8, atol = 1e-10; // tighter convergence
-
-    runNonlinearStatic(
-        comm, t, rt, Lr, E, temperature,
-        nelems, conv_slope_frac,
-        rtol, atol,
-        urStarBC,
-        ringStiffened, ringStiffenedRadiusFrac,
-        NUM_IMP, imperfections,
-        &nasaKDF, &tacsKDF
-    );
-
-    MPI_Finalize();
-
-    return 0;
+    // write final nonlinear mode to a file
+    if ( runLinearEigval ) {
+        // assume perfect case
+        f5->writeToFile("nlstatic-perfect.f5");
+    } else {
+        // assume imperfect case
+        f5->writeToFile("nlstatic-imperfect.f5");
+    }
+    
 }

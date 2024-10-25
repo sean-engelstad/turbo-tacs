@@ -5,7 +5,7 @@ import argparse
 
 # read the csv file "load_disp.csv" and plot it
 ind = 1
-df = pd.read_csv("load-disp.csv")
+df = pd.read_csv("load-disp-perfect.csv")
 # df = pd.read_csv("load-disp_saved.csv")
 min_load = df[["minS11"]].to_numpy()
 avg_load = df[["avgS11"]].to_numpy()

@@ -1,4 +1,4 @@
-#include "../therm-cylinder-include/getKDF.h"
+#include "../therm-cylinder-include/5_getKDF.h"
 
 // this is a nonlinear buckling example of a cylinder under mechanical loading
 // with applied geometric imperfections. The load factor for nonlinear buckling is determined automatically.
@@ -11,33 +11,26 @@ int main(int argc, char *argv[]) {
     // Get the rank
     MPI_Comm comm = MPI_COMM_WORLD;
 
-    double t = 0.002;
-    double rt = 100;
-    double Lr = 2.0;
-    const int NUM_IMP = 3;
-    double temperature = 1.0; // K (may have to adjust depending on the)
-    double E = 70e5; // 70e9 // can scale the problem (won't affect disps)
-    double conv_eigval = 0.3; // 0.01, 0.1
-    double conv_slope_frac = 0.1;
-    // worried that if I scale down too much, won't solve as deeply though.
+    // material and geometric inputs
+    double t = 0.002, rt = 100, Lr = 2.0;
+    double temperature = 1.0;
+    double E = 70e9;
 
-    // for debugging
-    // TacsScalar imperfections[NUM_IMP] = {0.0 * t, 0.0, 0.0 };
-    // TacsScalar imperfections[NUM_IMP] = {0.5 * t, 0.0, 0.0 };
-    TacsScalar imperfections[NUM_IMP] = {0.0, 0.0, 0.5 * t };
-    bool useEigvals = false; // use load-disp curve for thermal
+    // mesh, BC, and solver settings
     int nelems = 20000;
-    std::string filePrefix = "";
-    TacsScalar nasaKDF, tacsKDF;
-    bool ringStiffened = false;
+    bool urStarBC = false, ringStiffened = false;
     double ringStiffenedRadiusFrac = 0.9;
+    int NUM_IMP = 3;
+    TacsScalar imperfections[NUM_IMP] = {0.0, 0.0, 0.5 * t };
+    double rtol = 1e-6, atol = 1e-10, conv_slope_frac = 0.2;
+    double tacsKDF, nasaKDF;
 
-    getNonlinearBucklingKDF(
-        comm, 1, filePrefix, t, rt, Lr, E, temperature, 
-        conv_eigval, conv_slope_frac,
-        ringStiffened, ringStiffenedRadiusFrac,
+    getKDF(
+        comm, t, rt, Lr, temperature, E,
+        nelems, urStarBC, ringStiffened, ringStiffenedRadiusFrac,
         NUM_IMP, &imperfections[0],
-        useEigvals, nelems, &nasaKDF, &tacsKDF
+        rtol, atol, conv_slope_frac,
+        &tacsKDF, &nasaKDF
     );
 
     MPI_Finalize();
