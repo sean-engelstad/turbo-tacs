@@ -10,8 +10,9 @@
   Create the TACSAssembler object and return the associated TACS
   creator object
 */
-void createAssembler(MPI_Comm comm, int order, int nx, int ny, TacsScalar udisp,
-                     double length, double radius, 
+void createAssembler(MPI_Comm comm, int order, int nx, int ny, 
+                     double length, double radius,
+                     bool urStarBC, TacsScalar urStar, 
                      bool ringStiffened, double ringStiffenedRadiusFrac,
                      TACSElement *element, TACSAssembler **_assembler,
                      TACSCreator **_creator) {
@@ -90,13 +91,24 @@ void createAssembler(MPI_Comm comm, int order, int nx, int ny, TacsScalar udisp,
       // maybe should only constrain rotation at like 1 point or so
       // if do want rotx constrained, then you should set 4 * numBCs instead of 3 * numBCs above and loop to m < 4
       for (int j = 0; j < nny; j++) { // set u, v, w, xrot to zero
+        TacsScalar th = -M_PI + (2.0 * M_PI * j) / nny;
         // bc at x- edge
         bc_ptr[i+1] = bc_ptr[i]; // start BC dof counter
         int node = j * nnx;
         bcNodes[k] = node;
         for (int m = 0; m < 3; m++) {
           bc_vars[bc_ptr[i+1]] = m; // DOF m is set to 0 disp
-          bc_vals[bc_ptr[i+1]] = 0.0;
+          TacsScalar disp;
+          if (urStarBC) {
+            if (m == 0) { 
+              disp == 0;
+            } else if (m == 1) {
+              disp = urStar * cos(th);
+            } else if (m == 2) {
+              disp = urStar * -sin(th);
+            }
+          } else { disp = 0.0; }
+          bc_vals[bc_ptr[i+1]] = disp;
           bc_ptr[i+1]++;
           // printf("x- node %d with DOF %d set to %.2e with total BCs %d\n", node, m, bc_vals[bc_ptr[i+1]-1], bc_ptr[i+1]);
         }
@@ -108,11 +120,15 @@ void createAssembler(MPI_Comm comm, int order, int nx, int ny, TacsScalar udisp,
         for (int m = 0; m < 3; m++) { // set x = udisp and y,z,rotx to 0
           bc_vars[bc_ptr[i+1]] = m; // DOF m is set to 0 disp
           TacsScalar disp;
-          if (m == 0) {
-              disp = udisp;
-          } else {
-              disp = 0.0;
-          }
+          if (urStarBC) {
+            if (m == 0) { 
+              disp == 0;
+            } else if (m == 1) {
+              disp = urStar * cos(th);
+            } else if (m == 2) {
+              disp = urStar * -sin(th);
+            }
+          } else { disp = 0.0; }
           bc_vals[bc_ptr[i+1]] = disp;
           bc_ptr[i+1]++;
           // printf("x+ node %d with DOF %d set to %.2e with total BCs %d\n", node, m, bc_vals[bc_ptr[i+1]-1], bc_ptr[i+1]);
@@ -137,13 +153,24 @@ void createAssembler(MPI_Comm comm, int order, int nx, int ny, TacsScalar udisp,
       // maybe should only constrain rotation at like 1 point or so
       // if do want rotx constrained, then you should set 4 * numBCs instead of 3 * numBCs above and loop to m < 4
       for (int j = 0; j < nny; j++) { // set u, v, w, xrot to zero
+        TacsScalar th = -M_PI + (2.0 * M_PI * j) / nny;
         // bc at x- edge
         bc_ptr[i+1] = bc_ptr[i]; // start BC dof counter
         int node = j * nnx;
         bcNodes[k] = node;
         for (int m = 0; m < 3; m++) {
           bc_vars[bc_ptr[i+1]] = m; // DOF m is set to 0 disp
-          bc_vals[bc_ptr[i+1]] = 0.0;
+          TacsScalar disp;
+          if (urStarBC) {
+            if (m == 0) { 
+              disp == 0;
+            } else if (m == 1) {
+              disp = urStar * cos(th);
+            } else if (m == 2) {
+              disp = urStar * -sin(th);
+            }
+          } else { disp = 0.0; }
+          bc_vals[bc_ptr[i+1]] = disp;
           bc_ptr[i+1]++;
           // printf("x- node %d with DOF %d set to %.2e with total BCs %d\n", node, m, bc_vals[bc_ptr[i+1]-1], bc_ptr[i+1]);
         }
@@ -177,11 +204,15 @@ void createAssembler(MPI_Comm comm, int order, int nx, int ny, TacsScalar udisp,
         for (int m = 0; m < 3; m++) { // set x = udisp and y,z,rotx to 0
           bc_vars[bc_ptr[i+1]] = m; // DOF m is set to 0 disp
           TacsScalar disp;
-          if (m == 0) {
-              disp = udisp;
-          } else {
-              disp = 0.0;
-          }
+          if (urStarBC) {
+            if (m == 0) { 
+              disp == 0;
+            } else if (m == 1) {
+              disp = urStar * cos(th);
+            } else if (m == 2) {
+              disp = urStar * -sin(th);
+            }
+          } else { disp = 0.0; }
           bc_vals[bc_ptr[i+1]] = disp;
           bc_ptr[i+1]++;
           // printf("x+ node %d with DOF %d set to %.2e with total BCs %d\n", node, m, bc_vals[bc_ptr[i+1]-1], bc_ptr[i+1]);

@@ -54,6 +54,10 @@ int main(int argc, char *argv[]) {
   TacsScalar kappa = 230.0;
   TACSMaterialProperties *props = new TACSMaterialProperties(rho, specific_heat, E, nu, ys, cte, kappa);
 
+  // amount of radial / hoop expansion
+  double urStar = (1+nu) * cte * temperature * R;
+  bool urStarBC = true; // whether to do ur=ur* BC for the hoop ends
+
   // TacsScalar axis[] = {1.0, 0.0, 0.0};
   // TACSShellTransform *transform = new TACSShellRefAxisTransform(axis);
   TACSShellTransform *transform = new TACSShellNaturalTransform();
@@ -65,9 +69,13 @@ int main(int argc, char *argv[]) {
   // needs to be nonlinear here otherwise solve will terminate immediately
   shell = new TACSQuad4Shell(transform, con); 
   shell->incref();
-  createAssembler(comm, 2, nx, ny, udisp, L, R,
-  ringStiffened, ringStiffenedRadiusFrac,
-  shell, &assembler, &creator);  
+  createAssembler(
+    comm, 2, nx, ny,
+    L, R,
+    true, urStar,
+    false, 0.9,
+    shell, &assembler, &creator
+  );  
 
   assembler->incref();
   creator->incref();
