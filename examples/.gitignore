@@ -4,3 +4,6 @@ _buckling
 _static
 *.x
 *.out
+*images/
+*.png
+*.txt

@@ -4,15 +4,14 @@
 #include "TACSContinuation.h"
 #include "TACSToFH5.h"
 
-void runNonlinearStatic(MPI_Comm comm, 
+void runNonlinearStatic(MPI_Comm comm, std::string filePrefix,
     double t, double rt, double Lr, 
     double E, double temperature, 
     int nelems, double conv_slope_frac,
-    double rtol, double atol,
-    bool urStarBC, bool runLinearEigval,
-    bool ringStiffened, double ringStiffenedRadiusFrac,
+    double rtol, double atol, 
+    bool urStarBC, bool ringStiffened, double ringStiffenedRadiusFrac,
     int NUM_IMP, TacsScalar *imperfection_sizes,
-    double *linear_eigval, TacsScalar *lambdaNL
+    TacsScalar *lambdaNL
     ) {
     
     int rank;
@@ -30,6 +29,15 @@ void runNonlinearStatic(MPI_Comm comm,
     u0->incref(); f->incref(); x->incref();
     f->zeroEntries();
     assembler->getDesignVars(x);
+
+    // determine whether it's the perfectGeom or not based on imperfections (all zero for perfect)
+    bool perfectGeom = true;
+    for (int i_imperfect = 0; i_imperfect < NUM_IMP; i_imperfect++) {
+        if (imperfection_sizes[i_imperfect] != 0.0) {
+            perfectGeom = false;
+            break;
+        }
+    }
 
     // make the stiffness matrix
     TACSSchurMat *kmat = assembler->createSchurMat();  // stiffness matrix
@@ -49,11 +57,9 @@ void runNonlinearStatic(MPI_Comm comm,
 
     // get linear buckling eigenvalue and adjust initial temp
     assembler->setTemperatures(temperature);
-    double lambda_adjustment;
-    if (runLinearEigval) {
-        *linear_eigval = linearBuckling(assembler, kmat, pc, NUM_IMP, imperfection_sizes);
-        lambda_adjustment = *linear_eigval / 200.0;
-    } else {lambda_adjustment = *linear_eigval;}
+    TacsScalar ts_linear_eigval = linearBuckling(assembler, kmat, pc, NUM_IMP, imperfection_sizes);
+    double linear_eigval = TacsRealPart(ts_linear_eigval);
+    double lambda_adjustment = linear_eigval / 200.0;
     
     // temperature *= linear_eigval / 200.0; // good rule is if the linear buckling is at 200 about zero disps, then do delta_lambda = 5.0
 
@@ -70,11 +76,15 @@ void runNonlinearStatic(MPI_Comm comm,
     // main output file
     FILE *fp;
     if (rank == 0) {
-        if (runLinearEigval) {
-            fp = fopen("load-disp-perfect.csv", "w");
+        std::string filename;
+        if (perfectGeom) {
+            filename = filePrefix + "/load-disp-perfect.csv";
         } else {
-            fp = fopen("load-disp-imperfect.csv", "w");
+            filename = filePrefix + "/load-disp-imperfect.csv";
         }
+        const char *cstr_filename = filename.c_str();
+        fp = fopen(cstr_filename, "w");
+        
         
         if (fp) {
             fprintf(fp, "iter,|u|,lambda/lamLin,minS11,avgS11,maxS11,avgSlopeFrac\n");
@@ -85,7 +95,7 @@ void runNonlinearStatic(MPI_Comm comm,
     // initial temperature and settings
     // lambda_adjustment = linear_eigval / 200.0 so that buckling should happen at lambda = 200.0
     TacsScalar delta_lambda = 3.0 * lambda_adjustment; // load-factor step size (for 200 total)
-    TacsScalar lambda_init = 10.0 * lambda_adjustment; // init load factor
+    TacsScalar lambda_init = 5.0 * lambda_adjustment; // init load factor
     TacsScalar lambda = lambda_init;
     TacsScalar res_norm_init = 1.0; double target_res_norm;
 
@@ -125,8 +135,13 @@ void runNonlinearStatic(MPI_Comm comm,
     gmres->solve(f, du);
     vars->axpy(1.0, du); // prelim u0 guess
 
+    // do new Newton solve
+    int max_num_restarts = 3;
+    int num_newton = 40;
+    int num_restarts = 0;
+
     // Newton solve loop to get u_init, lambda = lambda_init (for init load factor)   
-    for (int inewton = 0; inewton < 100; inewton++) {
+    for (int inewton = 0; inewton < num_newton; inewton++) {
         // update nonlinear residual
         assembler->setTemperatures(lambda * temperature); // prob don't need to reset this, but still fine
         assembler->setVariables(vars);
@@ -152,14 +167,31 @@ void runNonlinearStatic(MPI_Comm comm,
             target_res_norm = rtol * TacsRealPart(res_norm_init) + atol;
         }
         if (TacsRealPart(res_norm) < target_res_norm) { break; }
+
+        // if starting to have trouble to converge, lower delta_lambda and lambda and reduce rtol
+        if ( TacsRealPart(res_norm) >= 1e4 && inewton >= 5 ) {
+            lambda *= 0.5; // lower the starting lambda
+            // rtol = 1e-6; // lower rtol and the step size in load factor
+            target_res_norm = rtol * TacsRealPart(res_norm_init) + atol;
+            vars->copyValues(old_vars);
+            num_restarts++;
+
+            // compute and factor the new stiffness matrix
+            assembler->setTemperatures(lambda * temperature);
+            assembler->setVariables(vars);
+            assembler->assembleJacobian(1.0, 0.0, 0.0, res, kmat, TACS_MAT_NORMAL, 1.0, lambda);
+        }
+
+        if (inewton == num_newton - 1) {
+            num_restarts++; // didn't converge well, penalize it
+        }
     }
 
     // now do load increments and Newton solves here
     // ---------------------------------------------
 
-    // do new Newton solve
-    int max_num_restarts = 4;
-    int num_restarts = 0;
+    // reset max num restarts
+    num_restarts = 0;
 
     for (int iload = 0; iload < 300; iload++) {
         
@@ -177,11 +209,11 @@ void runNonlinearStatic(MPI_Comm comm,
         if (ksm_print) {
             char line[256];
             sprintf(line, "Outer iteration %3d: t: %9.4f lambda/lamLin %9.4f\n",
-                    iload, MPI_Wtime() - t0, TacsRealPart(lambda / *linear_eigval));
+                    iload, MPI_Wtime() - t0, TacsRealPart(lambda / linear_eigval));
             ksm_print->print(line);
         }
 
-        for (int inewton = 0; inewton < 100; inewton++) {
+        for (int inewton = 0; inewton < 40; inewton++) {
             // update nonlinear residual
             assembler->setTemperatures(lambda * temperature); // prob don't need to reset this, but still fine
             assembler->setVariables(vars);
@@ -228,9 +260,15 @@ void runNonlinearStatic(MPI_Comm comm,
                 break;
             }
 
+            if (inewton == num_newton - 1) {
+                num_restarts++; // didn't converge well, penalize it
+            }
+
         } // end of newton iteration for each load step
 
         if (num_restarts > max_num_restarts) {
+            // still save the lambdaNL (may just be buckling here)
+            *lambdaNL = TacsRealPart(lambda / linear_eigval);
             printf("failed to converge at load step %d", iload);
             if (fp) {
                 fprintf(fp, "failed to converge at load step %d\n", iload);
@@ -262,7 +300,7 @@ void runNonlinearStatic(MPI_Comm comm,
         // update load-displacement curve output file
         if (fp) {
             // iter, |u|, lambda/lamLin, minS11, avgS11, maxS11, avgSlopeFrac
-            fprintf(fp, "%2d,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e\n", iload+1, TacsRealPart(vars->norm()), TacsRealPart(lambda / *linear_eigval),
+            fprintf(fp, "%2d,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e,%15.6e\n", iload+1, TacsRealPart(vars->norm()), TacsRealPart(lambda / linear_eigval),
             TacsRealPart(min_stress), TacsRealPart(avg_stress), TacsRealPart(max_stress), TacsRealPart(c_slope / init_slope));
             fflush(fp);
         }
@@ -279,20 +317,25 @@ void runNonlinearStatic(MPI_Comm comm,
         const char *cstr_filename = filename.c_str();
         f5->writeToFile(cstr_filename);
 
-        if (c_slope < conv_slope_frac && iload > 10) {
+        if (TacsRealPart(c_slope / init_slope) < conv_slope_frac && iload > 10) {
             // significant drop in stiffness and slope to buckling..
-            *lambdaNL = TacsRealPart(lambda / *linear_eigval);
+            *lambdaNL = TacsRealPart(lambda / linear_eigval);
             break; // exit the nonlinear solve loop
         }
     } // end of load increment loop
 
     // write final nonlinear mode to a file
-    if ( runLinearEigval ) {
+    std::string filename;
+    if ( perfectGeom ) {
         // assume perfect case
-        f5->writeToFile("nlstatic-perfect.f5");
+        filename = filePrefix + "/nlstatic-perfect.f5";
     } else {
         // assume imperfect case
-        f5->writeToFile("nlstatic-imperfect.f5");
+        filename = filePrefix + "/nlstatic-imperfect.f5";
+    }
+    if (rank == 0) {
+        const char *cstr_filename2 = filename.c_str();
+        f5->writeToFile(cstr_filename2);
     }
     
 }

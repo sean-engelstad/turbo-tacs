@@ -1,13 +1,13 @@
 include ../../Makefile.in
 include ../../A2D_SHELLS.mk
 
-LOCAL_OBJS = thermNLBuckling.o
-EXECS = therm-nlbuckling.x
+LOCAL_OBJS = thermNLStatic.o
+EXECS = therm-nlstatic.x
 
 default: ${LOCAL_OBJS} ${EXECS}
 
-therm-nlbuckling.x:
-	${CXX} -o therm-nlbuckling.x thermNLBuckling.o ${TACS_LD_FLAGS}
+therm-nlstatic.x:
+	${CXX} -o therm-nlstatic.x thermNLStatic.o ${TACS_LD_FLAGS}
 
 debug: TACS_CC_FLAGS=${TACS_DEBUG_CC_FLAGS}
 debug: default
@@ -27,6 +27,5 @@ clean:
 	rm -f *.x || echo "Missing .x files"
 
 cleanf5:
-	rm *.f5 || echo "no f5 files"
-	rm *.vtk || echo "no vtk files"
-	rm *.csv || echo "no csv files"
+	rm -f **/*.f5
+	rm -f **/*.vtk

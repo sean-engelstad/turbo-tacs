@@ -1,6 +1,6 @@
 #include "4_runNonlinearStatic.h"
 
-void getKDF(MPI_Comm comm, double t, double rt, double Lr, double temperature, double E,
+void getKDF(MPI_Comm comm, std::string filePrefix, double t, double rt, double Lr, double temperature, double E,
             int nelems, bool urStarBC, bool ringStiffened, double ringStiffenedRadiusFrac,
             const int NUM_IMP, TacsScalar *imperfections,
             double rtol, double atol, double conv_slope_frac,
@@ -13,26 +13,24 @@ void getKDF(MPI_Comm comm, double t, double rt, double Lr, double temperature, d
     TacsScalar no_imperfections[NUM_IMP] = { };
 
     // run the perfect cylinder case
-    double linear_eigval, lamNL_perfect, lamNL_imperfect;
+    double lamNL_perfect, lamNL_imperfect;
     runNonlinearStatic(
-        comm, t, rt, Lr, E, temperature,
+        comm, filePrefix, t, rt, Lr, E, temperature,
         nelems, conv_slope_frac,
         rtol, atol,
-        urStarBC, true, // runLinearEigval in perfect case
-        ringStiffened, ringStiffenedRadiusFrac,
+        urStarBC, ringStiffened, ringStiffenedRadiusFrac,
         NUM_IMP, no_imperfections,
-        &linear_eigval, &lamNL_perfect
+        &lamNL_perfect
     );
 
     // run the cylinder in the imperfect case
     runNonlinearStatic(
-        comm, t, rt, Lr, E, temperature,
+        comm, filePrefix, t, rt, Lr, E, temperature,
         nelems, conv_slope_frac,
         rtol, atol,
-        urStarBC, false, // runLinearEigval in perfect case
-        ringStiffened, ringStiffenedRadiusFrac,
+        urStarBC, ringStiffened, ringStiffenedRadiusFrac,
         NUM_IMP, imperfections,
-        &linear_eigval, &lamNL_imperfect
+        &lamNL_imperfect
     );
 
     *tacsKDF = lamNL_imperfect / lamNL_perfect;
@@ -43,7 +41,9 @@ void getKDF(MPI_Comm comm, double t, double rt, double Lr, double temperature, d
     // write to an output file
     FILE *fp;
     if (rank == 0) {
-        fp = fopen("nlbuckling.out", "w");
+        std::string filename = filePrefix + "/nlbuckling.out";
+        const char *cstr_filename = filename.c_str();
+        fp = fopen(cstr_filename, "w");
         
         if (fp) {
             fprintf(fp, "t = %.8e, r/t = %.8e, L/r = %.8e, nelems = %d", t, rt, Lr, nelems);

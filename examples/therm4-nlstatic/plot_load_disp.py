@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import argparse
 
 # read the csv file "load_disp.csv" and plot it
-ind = 1
-df = pd.read_csv(f"load-disp{ind}.csv")
+perfect_str = "imperfect"
+df = pd.read_csv(f"load-disp-{perfect_str}.csv")
 min_load = df[["minS11"]].to_numpy()
 avg_load = df[["avgS11"]].to_numpy()
 max_load = df[["maxS11"]].to_numpy()
-disp = df[["lambda"]].to_numpy()
+disp = df[["lambda/lamLin"]].to_numpy()
 
 freq = 1
 plt.plot(disp[0::freq], min_load[0::freq], "o-", color='tab:blue', linewidth=2, label="minS11")

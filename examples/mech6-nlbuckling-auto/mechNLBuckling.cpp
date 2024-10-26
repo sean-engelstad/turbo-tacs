@@ -21,8 +21,8 @@ int main(int argc, char *argv[]) {
     // worried that if I scale down too much, won't solve as deeply though.
 
     // for debugging
-    // TacsScalar imperfections[NUM_IMP] = {0.0 * t, 0.0, 0.0 };
-    TacsScalar imperfections[NUM_IMP] = {0.5 * t, 0.0, 0.0 };
+    TacsScalar imperfections[NUM_IMP] = {0.0 * t, 0.0, 0.0 };
+    // TacsScalar imperfections[NUM_IMP] = {0.5 * t, 0.0, 0.0 };
     bool useEigvals = true;
     int nelems = 20000;
     std::string filePrefix = "";
