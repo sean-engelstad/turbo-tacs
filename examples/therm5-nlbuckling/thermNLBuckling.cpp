@@ -13,14 +13,15 @@ int main(int argc, char *argv[]) {
     MPI_Comm comm = MPI_COMM_WORLD;
 
     // material and geometric inputs
-    double t = 0.002, rt = 100, Lr = 2.0;
+    double t = 0.002, rt = 500, Lr = 2.0;
     double temperature = 1.0;
     double E = 70e9;
 
     // choose the filePrefix and make folder for this particular case
     namespace fs = std::filesystem;
+    int rt_int = (int)rt;
     std::string my_case = "ur0"; // Options: ur0, urStar, ring, rocket
-    std::string filePrefix = "./" + my_case + "-" + std::to_string(rt);
+    std::string filePrefix = "./" + my_case + "-rt" + std::to_string(rt_int);
     fs::create_directories(filePrefix);
 
     // mesh, BC, and solver settings
@@ -28,7 +29,8 @@ int main(int argc, char *argv[]) {
     bool urStarBC = false, ringStiffened = false;
     double ringStiffenedRadiusFrac = 0.9;
     int NUM_IMP = 3;
-    TacsScalar imperfections[NUM_IMP] = {0.0, 0.0, 0.5 * t };
+    TacsScalar imperfections[NUM_IMP] = { 0.5 * t, 0.0, 0.0 };
+    // TacsScalar imperfections[NUM_IMP] = {0.0, 0.0, 0.5 * t };
     double rtol = 1e-6, atol = 1e-10, conv_slope_frac = 0.2;
     double tacsKDF, nasaKDF;
 
@@ -39,6 +41,17 @@ int main(int argc, char *argv[]) {
         rtol, atol, conv_slope_frac,
         &tacsKDF, &nasaKDF
     );
+
+    // TacsScalar _;
+    // runNonlinearStatic(
+    //     comm, filePrefix, t, rt, Lr, E, temperature,
+    //     nelems, conv_slope_frac,
+    //     rtol, atol,
+    //     urStarBC, ringStiffened, ringStiffenedRadiusFrac,
+    //     NUM_IMP, imperfections,
+    //     &_
+    // );
+
 
     MPI_Finalize();
 

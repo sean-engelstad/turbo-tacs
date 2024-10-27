@@ -2,8 +2,9 @@
 #include "TACSBuckling.h"
 #include "TACSToFH5.h"
 #include "_applyImperfections.h"
+#include <string>
 
-double linearBuckling(TACSAssembler *assembler, TACSMat *kmat, TACSSchurPc *pc,
+double linearBuckling(std::string filePrefix, TACSAssembler *assembler, TACSMat *kmat, TACSSchurPc *pc,
                       int NUM_IMP, TacsScalar *imperfection_sizes) {
     // create the matrices for buckling
     TACSSchurMat *gmat = assembler->createSchurMat();  // geometric stiffness matrix
@@ -46,12 +47,25 @@ double linearBuckling(TACSAssembler *assembler, TACSMat *kmat, TACSSchurPc *pc,
     TACSToFH5 *f5 = new TACSToFH5(assembler, TACS_BEAM_OR_SHELL_ELEMENT, write_flag);
     f5->incref();
 
+    // get which mode is the max
+    TacsScalar error1;
+    int iphi;
+    double max_imp = 0.0; // get argmax of imperfection sizes
+    for (int i = 0; i < NUM_IMP; i++) {
+        if (TacsRealPart(imperfection_sizes[i]) > max_imp) {
+            max_imp = TacsRealPart(imperfection_sizes[i]);
+            iphi = i;
+        }
+    }
+
     // write the linear buckling solution to a file
     TACSBVec *phi = assembler->createVec();
     phi->incref();
-    buckling->extractEigenvector(0, phi, &error);
+    buckling->extractEigenvector(iphi, phi, &error);
     assembler->setVariables(phi);   
-    f5->writeToFile("linear-buckle.f5");
+    std::string filename = filePrefix + "/linear-buckle.f5";
+    const char *cstr_filename = filename.c_str();
+    f5->writeToFile(cstr_filename);
 
     // apply imperfections to the structure
     applyImperfections(assembler, buckling, NUM_IMP, imperfection_sizes);

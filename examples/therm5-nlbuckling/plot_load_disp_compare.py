@@ -3,12 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 
+case = "urStar-rt100"
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
 fig.suptitle('Horizontally stacked subplots')
 for perfect_str in ["perfect", "imperfect"]:
     # read the csv file "load_disp.csv" and plot it
-    df = pd.read_csv(f"load-disp-{perfect_str}.csv")
+    df = pd.read_csv(f"{case}/load-disp-{perfect_str}.csv")
     min_load = df[["minS11"]].to_numpy()
     disp = df[["lambda/lamLin"]].to_numpy()
 

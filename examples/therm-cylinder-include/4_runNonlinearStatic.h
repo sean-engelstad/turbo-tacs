@@ -57,7 +57,7 @@ void runNonlinearStatic(MPI_Comm comm, std::string filePrefix,
 
     // get linear buckling eigenvalue and adjust initial temp
     assembler->setTemperatures(temperature);
-    TacsScalar ts_linear_eigval = linearBuckling(assembler, kmat, pc, NUM_IMP, imperfection_sizes);
+    TacsScalar ts_linear_eigval = linearBuckling(filePrefix, assembler, kmat, pc, NUM_IMP, imperfection_sizes);
     double linear_eigval = TacsRealPart(ts_linear_eigval);
     double lambda_adjustment = linear_eigval / 200.0;
     
@@ -244,7 +244,7 @@ void runNonlinearStatic(MPI_Comm comm, std::string filePrefix,
             if ( TacsRealPart(res_norm) >= 1e4 && inewton >= 5 ) {
                 lambda -= delta_lambda / 2;
                 delta_lambda *= 0.5;
-                rtol *= 10.0;
+                // rtol *= 10.0;
                 // rtol = 1e-6; // lower rtol and the step size in load factor
                 target_res_norm = rtol * TacsRealPart(res_norm_init) + atol;
                 vars->copyValues(old_vars);
