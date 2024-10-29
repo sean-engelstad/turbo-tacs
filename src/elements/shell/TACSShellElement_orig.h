@@ -613,15 +613,15 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addJacobian(
     mat3x3SymmTransformTransSens(XdinvT, de0ty, dgty);
     mat3x3SymmTransformTransHessian(XdinvT, d2e0ty, d2gty);
 
+    // // debug first order derivs part 2
+    for (int k = 0; k < 6; k++) {
+      printf("de0ty[%d] %.8e\n", k, de0ty[k]);
+      printf("dgty[%d] %.8e\n", k, dgty[k]);
+    }
+
     for (int i8 = 0; i8 < 36; i8++) {
       printf("d2gty[%d] = %.8e\n", i8, d2gty[i8]);
     }
-
-    // // debug first order derivs part 2
-    // for (int k = 0; k < 6; k++) {
-    //   printf("de0ty[%d] %.8e\n", k, de0ty[k]);
-    //   printf("dgty[%d] %.8e\n", k, dgty[k]);
-    // }
 
     // Evaluate the tying strain
     basis::addInterpTyingStrainTranspose(pt, dgty, dety);

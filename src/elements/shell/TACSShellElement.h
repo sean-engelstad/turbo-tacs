@@ -787,10 +787,10 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     //   printf("dd0xi[%d] %.8e\n", j, d0xi.bvalue()[j]);
     //   printf("du0xi[%d] %.8e\n", j, u0xi.bvalue()[j]);
     // }
-    // for (int k = 0; k < 6; k++) {
-    //   printf("de0ty[%d] %.8e\n", k, e0ty.bvalue().get_data()[k]);
-    //   printf("dgty[%d] %.8e\n", k, gty.bvalue().get_data()[k]);
-    // }
+    for (int k = 0; k < 6; k++) {
+      printf("de0ty[%d] %.8e\n", k, e0ty.bvalue().get_data()[k]);
+      printf("dgty[%d] %.8e\n", k, gty.bvalue().get_data()[k]);
+    }
     
     // reverse through the basis back to the director class, drill strain, tying strain
     basis::template addInterpFieldsTranspose<1, 1>(pt, et.bvalue().get_data(), detn);

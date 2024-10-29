@@ -1,10 +1,13 @@
 include ../../Makefile.in
 include ../../A2D_SHELLS.mk
 
-default: mya2d.o mya2d.x
+LOCAL_OBJS = TestMatRotateFrame.o
+LOCAL_EXECS = test_mat_frame.x
 
-runcrm:
-	${CXX} -o mya2d.x mya2d.o ${TACS_LD_FLAGS}
+default: ${LOCAL_OBJS} ${LOCAL_EXECS}
+
+test_mat_frame.x:
+	${CXX} -o test_mat_frame.x TestMatRotateFrame.o ${TACS_LD_FLAGS}
 
 debug: TACS_CC_FLAGS=${TACS_DEBUG_CC_FLAGS}
 debug: default

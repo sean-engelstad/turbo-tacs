@@ -36,7 +36,7 @@ newrun:
 	make run
 
 clean:
-	rm -f *.o
-	rm -f *.x
-	rm -f *.f5
-	rm -f *.vtk
+	rm -f *.o || echo "no .o files"
+	rm -f *.x || echo "no .x files"
+	rm -f *.f5 || echo "no .f5 files"
+	rm -f *.vtk || echo "no .vtk files"
