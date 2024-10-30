@@ -761,12 +761,39 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     A2D::Mat<TacsScalar, 6, 3> d2gtyd0;
     A2D::Mat<TacsScalar, 6, 6> d2d0xi, d2d0xiu0xi, d2u0xi, d2gty, d2gtyd0xi, d2gtyu0xi;
 
+    // debugging
+    A2D::Mat<TacsScalar, 6, 6> d2e0ty;
+
     // d0, d0xi, u0xi, et, gty
     const int ncomp = 22;
     A2D::SymMat<TacsScalar, ncomp> hess;
-    auto in = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::p>(d0, d0xi, u0xi, gty, et);
-    auto out = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::h>(d0, d0xi, u0xi, gty, et);
-    strain_energy_stack.hextract(in, out, hess);
+    // auto in = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::p>(d0, d0xi, u0xi, gty, et);
+    // auto out = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::h>(d0, d0xi, u0xi, gty, et);
+
+    // debugging get e0ty instead of gty
+    auto in = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::p>(d0, d0xi, u0xi, e0ty, et);
+    auto out = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::h>(d0, d0xi, u0xi, e0ty, et);
+    // strain_energy_stack.hextract(in, out, hess);
+
+    // try my own custom hextract since some hvalues are not getting re-zeroed correctly and build up magnitude
+    // maybe can fix this internally in a2d.. but not yet, try this first (d2gty was not right with regular hextract)
+    strain_energy_stack.reverse();
+    for (A2D::index_t icol = 0; icol < 22; icol++) {
+      in.zero();
+      Uelem.pvalue() = 0.0; // should compute nonzero hvalue and multiply by this or not? prob doesn't matter
+
+      in[icol] = 1.0;
+      strain_energy_stack.hforward();
+
+      // clear all input hvalues (this is what is not in original hextract that somehow needs to be)
+      out.zero();
+      strain_energy_stack.hreverse();
+
+      // extract hessian at input level
+      for (A2D::index_t irow = 0; irow < 22; irow++) {
+        hess(irow,icol) = out[irow];
+      }
+    }
 
     // try for debugging
     // // strain_energy_stack.hextract(d0.pvalue(), d0.hvalue(), d2d0);
@@ -787,10 +814,10 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     //   printf("dd0xi[%d] %.8e\n", j, d0xi.bvalue()[j]);
     //   printf("du0xi[%d] %.8e\n", j, u0xi.bvalue()[j]);
     // }
-    for (int k = 0; k < 6; k++) {
-      printf("de0ty[%d] %.8e\n", k, e0ty.bvalue().get_data()[k]);
-      printf("dgty[%d] %.8e\n", k, gty.bvalue().get_data()[k]);
-    }
+    // for (int k = 0; k < 6; k++) {
+    //   printf("de0ty[%d] %.8e\n", k, e0ty.bvalue().get_data()[k]);
+    //   printf("dgty[%d] %.8e\n", k, gty.bvalue().get_data()[k]);
+    // }
     
     // reverse through the basis back to the director class, drill strain, tying strain
     basis::template addInterpFieldsTranspose<1, 1>(pt, et.bvalue().get_data(), detn);
@@ -832,7 +859,8 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
           } else if (9 <= icol && icol < 15) { // u0xi cols
             d2gtyu0xi(irow-15, icol-9) = hess(irow,icol);
           } else if (15 <= icol && icol < 21) { // gty cols
-            d2gty(irow-15, icol-15) = hess(irow, icol);
+            // d2gty(irow-15, icol-15) = hess(irow, icol);
+            d2e0ty(irow-15, icol-15) = hess(irow, icol);
           }
         } // done with large irow if block 
       } // end of icol for loop
@@ -863,10 +891,14 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
       printf("d2u0xi[%d] = %.8e\n", i7, d2u0xi.get_data()[i7]);
     }
 
-    // in main addJacobian of orig
     for (int i8 = 0; i8 < 36; i8++) {
-      printf("d2gty[%d] = %.8e\n", i8, d2gty.get_data()[i8]);
+      printf("d2e0ty[%d] = %.8e\n", i8, d2e0ty.get_data()[i8]);
     }
+
+    // in main addJacobian of orig
+    // for (int i8 = 0; i8 < 36; i8++) {
+    //   printf("d2gty[%d] = %.8e\n", i8, d2gty.get_data()[i8]);
+    // }
 
     // matches TacsShellAddTyingDispCoupling
     // for (int i4 = 0; i4 < 18; i4++) {
