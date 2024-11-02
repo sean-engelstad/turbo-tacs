@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm comm = MPI_COMM_WORLD;
 
     double t = 0.002;
-    double rt = 100;
+    double rt = 500;
     double Lr = 2.0;
     const int NUM_IMP = 3;
     // double E = 70e9;
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     TacsScalar imperfections[NUM_IMP] = {0.0 * t, 0.0, 0.0 };
     // TacsScalar imperfections[NUM_IMP] = {0.5 * t, 0.0, 0.0 };
     bool useEigvals = true;
-    int nelems = 20000;
+    int nelems = 40000;
     std::string filePrefix = "";
     TacsScalar nasaKDF, tacsKDF;
 

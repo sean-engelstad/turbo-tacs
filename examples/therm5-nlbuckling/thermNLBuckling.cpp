@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm comm = MPI_COMM_WORLD;
 
     // material and geometric inputs
-    double t = 0.002, rt = 500, Lr = 2.0;
+    double t = 0.002, rt = 1000, Lr = 2.0;
     double temperature = 1.0;
     double E = 70e9;
 

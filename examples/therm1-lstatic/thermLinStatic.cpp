@@ -6,7 +6,7 @@
 #include "TACSShellElementDefs.h"
 #include "TACSToFH5.h"
 #include "tacslapack.h"
-#include "../therm-cylinder-include/createCylinderDispControl.h"
+#include "../therm-cylinder-include/1_createCylinderDispControl.h"
 
 // """
 // Code adapted from TACS example:
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
   // amount of radial / hoop expansion
   double urStar = (1+nu) * cte * temperature * R;
-  bool urStarBC = true; // whether to do ur=ur* BC for the hoop ends
+  bool urStarBC = false; // whether to do ur=ur* BC for the hoop ends
 
   // TacsScalar axis[] = {1.0, 0.0, 0.0};
   // TACSShellTransform *transform = new TACSShellRefAxisTransform(axis);
@@ -72,8 +72,8 @@ int main(int argc, char *argv[]) {
   createAssembler(
     comm, 2, nx, ny,
     L, R,
-    true, urStar,
-    false, 0.9,
+    urStarBC, urStar,
+    ringStiffened, 0.9,
     shell, &assembler, &creator
   );  
 
