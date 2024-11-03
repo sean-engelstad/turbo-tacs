@@ -641,24 +641,24 @@ void TacsShellAddDispGradHessian(const double pt[], const TacsScalar T[],
   TacsScalar d2d0xiu0xi[36], d2d0d0xi[18];
   TacsShellExtractFrameMixedSens(d2u0du1d, d2d0xiu0xi, d2d0d0xi);
 
-  for (int i1 = 0; i1 < 9; i1++) {
-    printf("d2d0[%d] = %.8e\n", i1, d2d0[i1]);
-  }
-  for (int i2 = 0; i2 < 18; i2++) {
-    printf("d2d0d0xi[%d] = %.8e\n", i2, d2d0d0xi[i2]);
-  }
-  for (int i3 = 0; i3 < 18; i3++) {
-    printf("d2d0u0xi[%d] = %.8e\n", i3, d2d0u0xi[i3]);
-  }
-  for (int i5 = 0; i5 < 36; i5++) {
-    printf("d2d0xi[%d] = %.8e\n", i5, d2d0xi[i5]);
-  }
-  for (int i6 = 0; i6 < 36; i6++) {
-    printf("d2d0xiu0xi[%d] = %.8e\n", i6, d2d0xiu0xi[i6]);
-  }
-  for (int i7 = 0; i7 < 36; i7++) {
-    printf("d2u0xi[%d] = %.8e\n", i7, d2u0xi[i7]);
-  }
+  // for (int i1 = 0; i1 < 9; i1++) {
+  //   printf("d2d0[%d] = %.8e\n", i1, d2d0[i1]);
+  // }
+  // for (int i2 = 0; i2 < 18; i2++) {
+  //   printf("d2d0d0xi[%d] = %.8e\n", i2, d2d0d0xi[i2]);
+  // }
+  // for (int i3 = 0; i3 < 18; i3++) {
+  //   printf("d2d0u0xi[%d] = %.8e\n", i3, d2d0u0xi[i3]);
+  // }
+  // for (int i5 = 0; i5 < 36; i5++) {
+  //   printf("d2d0xi[%d] = %.8e\n", i5, d2d0xi[i5]);
+  // }
+  // for (int i6 = 0; i6 < 36; i6++) {
+  //   printf("d2d0xiu0xi[%d] = %.8e\n", i6, d2d0xiu0xi[i6]);
+  // }
+  // for (int i7 = 0; i7 < 36; i7++) {
+  //   printf("d2u0xi[%d] = %.8e\n", i7, d2u0xi[i7]);
+  // }
 
   // df/(d(u0d)d(u1d))
   basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2d0, d2d);
@@ -1008,6 +1008,112 @@ void TacsShellAddTyingDispCouplingPostStack(const double pt[],
     basis::template addInterpFieldsTranspose<3, 3>(pt, &d2gtyd0[3 * k], &d2gtyd[dsize * k]);
     basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyd0xi[6 * k], &d2gtyd[dsize * k]);
     basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyu0xi[6 * k], &d2gtyu[usize * k]);
+  }
+
+  // Add the values into d2etyu and d2etyd
+  for (int k = 0; k < usize; k++) {
+    TacsScalar t1[6], t2[basis::NUM_TYING_POINTS];
+    memset(t2, 0, basis::NUM_TYING_POINTS * sizeof(TacsScalar));
+
+    for (int kk = 0; kk < 6; kk++) {
+      t1[kk] = d2gtyu[usize * kk + k];
+    }
+
+    basis::addInterpTyingStrainTranspose(pt, t1, t2);
+
+    for (int kk = 0; kk < basis::NUM_TYING_POINTS; kk++) {
+      d2etyu[kk * usize + k] += t2[kk];
+    }
+  }
+
+  for (int k = 0; k < dsize; k++) {
+    TacsScalar t1[6], t2[basis::NUM_TYING_POINTS];
+    memset(t2, 0, basis::NUM_TYING_POINTS * sizeof(TacsScalar));
+
+    for (int kk = 0; kk < 6; kk++) {
+      t1[kk] = d2gtyd[dsize * kk + k];
+    }
+
+    basis::addInterpTyingStrainTranspose(pt, t1, t2);
+
+    for (int kk = 0; kk < basis::NUM_TYING_POINTS; kk++) {
+      d2etyd[kk * dsize + k] += t2[kk];
+    }
+  }
+}
+
+/**
+  Add/accumulate the contribution to the Jacobians from the coupling between the
+  tying strain and the displacement gradient
+
+  @param pt The parametric point
+  @param XdinvT Product of inverse of the Jacobian trans. and T
+  @param d2e0tyd0 The second derivative of the tying strain and d0
+  @param d2e0tyd0xi The second derivative of the tying strain and d0xi
+  @param d2e0tyu0xi The second derivative of the tying strain and u0xi
+  @param d2etyu The second derivative of the tying strain and displacements
+  @param d2etyd The second derivative of the tying strain and the director
+*/
+template <class basis>
+void TacsShellAddTyingDispCouplingA2D(const double pt[],
+                                   const TacsScalar XdinvT[],
+                                   const TacsScalar d2e0tyd0[],
+                                   const TacsScalar d2e0tyu0xi[],
+                                   const TacsScalar d2e0tyd0xi[],
+                                   TacsScalar d2etyu[], TacsScalar d2etyd[]) {
+  const int usize = 3 * basis::NUM_NODES;
+  const int dsize = 3 * basis::NUM_NODES;
+
+  // Compute d2gtyd0, d2gtyd0xi, d2gtyu0xi
+  TacsScalar d2gtyd0[18], d2gtyd0xi[36], d2gtyu0xi[36];
+  
+  // Perform the sensitivity transformation
+  for (int id0 = 0; id0 < 3; id0++) {
+    TacsScalar t0[6], out[6];
+    for (int ie0ty = 0; ie0ty < 6; ie0ty++) {
+      t0[ie0ty] = d2e0tyd0[3 * ie0ty + id0];
+    }
+    mat3x3SymmTransformTransSens(XdinvT, t0, out);
+    for (int igty = 0; igty < 6; igty++) {
+      d2gtyd0[3 * igty + id0] = out[igty];
+    }
+  }
+
+  for (int id0xi = 0; id0xi < 6; id0xi++) {
+    TacsScalar t0[6], out[6];
+    for (int ie0ty = 0; ie0ty < 6; ie0ty++) {
+      t0[ie0ty] = d2e0tyd0xi[6 * ie0ty + id0xi];
+    }
+    mat3x3SymmTransformTransSens(XdinvT, t0, out);
+    for (int igty = 0; igty < 6; igty++) {
+      d2gtyd0xi[6 * igty + id0xi] = out[igty];
+    }
+  }
+
+  for (int iu0xi = 0; iu0xi < 6; iu0xi++) {
+    TacsScalar t0[6], out[6];
+    for (int ie0ty = 0; ie0ty < 6; ie0ty++) {
+      t0[ie0ty] = d2e0tyu0xi[6 * ie0ty + iu0xi];
+    }
+    mat3x3SymmTransformTransSens(XdinvT, t0, out);
+    for (int igty = 0; igty < 6; igty++) {
+      d2gtyu0xi[6 * igty + iu0xi] = out[igty];
+    }
+  }
+
+  TacsScalar d2gtyu[6 * usize], d2gtyd[6 * dsize];
+  memset(d2gtyu, 0, 6 * usize * sizeof(TacsScalar));
+  memset(d2gtyd, 0, 6 * dsize * sizeof(TacsScalar));
+
+  for (int igty = 0; igty < 6; igty++) {
+
+    // Compute the director field and the gradient of the director
+    // field at the specified point
+    basis::template addInterpFieldsTranspose<3, 3>(pt, &d2gtyd0[3 * igty], &d2gtyd[dsize * igty]);
+    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyd0xi[6 * igty],
+                                                       &d2gtyd[dsize * igty]);
+    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyu0xi[6 * igty],
+                                                       &d2gtyu[usize * igty]);
   }
 
   // Add the values into d2etyu and d2etyd

@@ -23,9 +23,8 @@ complex_debug: debug
 
 
 new:
-	rm *.txt || echo "no files to remove"
 	make clean
-	make
+	make debug
 
 run:
 	./runcrm.x >> new.txt
@@ -40,3 +39,4 @@ clean:
 	rm -f *.x || echo "no .x files"
 	rm -f *.f5 || echo "no .f5 files"
 	rm -f *.vtk || echo "no .vtk files"
+	rm *.txt || echo "no *.txt files to remove"

@@ -1,5 +1,5 @@
-#ifndef TACS_SHELL_ELEMENT_ORIG_H
-#define TACS_SHELL_ELEMENT_ORIG_H
+#ifndef TACS_SHELL_ELEMENT_H
+#define TACS_SHELL_ELEMENT_H
 
 #include "TACSDirector.h"
 #include "TACSElement.h"
@@ -10,10 +10,16 @@
 #include "TACSShellElementModel.h"
 #include "TACSShellElementTransform.h"
 #include "TACSShellUtilities.h"
-// #include "a2dh.h"
+#include "a2dcore.h"
+
+TacsScalar A2D_VecDot(A2D::Vec<TacsScalar, 3> a, A2D::Vec<TacsScalar, 3> b) {
+  TacsScalar myDot = 0.0;
+  A2D::VecDot<TacsScalar, 3>(a, b, myDot);
+  return myDot;
+};
 
 template <class quadrature, class basis, class director, class model>
-class TACSShellElementOrig : public TACSElement {
+class TACSShellElement : public TACSElement {
  public:
   // Offset within the solution vector to the rotational
   // parametrization defined via the director class. Here the offset
@@ -33,8 +39,9 @@ class TACSShellElementOrig : public TACSElement {
   static const int num_nodes = basis::NUM_NODES;
 
   bool complexStepGmatrix = false;
+  TacsScalar temperature = 0.0;
 
-  TACSShellElementOrig(TACSShellTransform *_transform,
+  TACSShellElement(TACSShellTransform *_transform,
                    TACSShellConstitutive *_con) {
     transform = _transform;
     transform->incref();
@@ -45,7 +52,7 @@ class TACSShellElementOrig : public TACSElement {
     // For linear models, we'll need to switch to a nonlinear implementation to
     // capture geometric effects
     if (typeid(model) == typeid(TACSShellLinearModel)) {
-      nlElem = new TACSShellElementOrig<quadrature, basis, director,
+      nlElem = new TACSShellElement<quadrature, basis, director,
                                     TACSShellNonlinearModel>(transform, con);
     }
     // For nonlinear models we can use the current class instance
@@ -54,7 +61,7 @@ class TACSShellElementOrig : public TACSElement {
     }
   }
 
-  ~TACSShellElementOrig() {
+  ~TACSShellElement() {
     if (transform) {
       transform->decref();
     }
@@ -73,6 +80,8 @@ class TACSShellElementOrig : public TACSElement {
 
   int getVarsPerNode() { return vars_per_node; }
   int getNumNodes() { return num_nodes; }
+  void setTemperature(TacsScalar _temp) {temperature = _temp;}
+  TacsScalar getTemperature() { return temperature; }
 
   ElementLayout getLayoutType() { return basis::getLayoutType(); }
 
@@ -198,7 +207,7 @@ class TACSShellElementOrig : public TACSElement {
   Compute the kinetic and potential energies of the shell
 */
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::computeEnergies(
+void TACSShellElement<quadrature, basis, director, model>::computeEnergies(
     int elemIndex, double time, const TacsScalar *Xpts, const TacsScalar *vars,
     const TacsScalar *dvars, TacsScalar *Te, TacsScalar *Ue) {
   // Zero the kinetic and potential energies
@@ -235,40 +244,51 @@ void TACSShellElementOrig<quadrature, basis, director, model>::computeEnergies(
     // Get the quadrature weight
     double pt[3];
     double weight = quadrature::getQuadraturePoint(quad_index, pt);
-
+    
     // Compute X, X,xi and the interpolated normal n0
-    TacsScalar X[3], Xxi[6], n0[3], T[9], et;
-    basis::template interpFields<3, 3>(pt, Xpts, X);
-    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-    basis::template interpFields<3, 3>(pt, fn, n0);
+    A2D::Mat<TacsScalar, 3, 3> T;
+    A2D::Vec<TacsScalar, 3> X, n0;
+    A2D::Mat<TacsScalar, 3, 2> Xxi;
+    TacsScalar et; // do we need a2d scalar with this drill strain?
+
+    basis::template interpFields<3, 3>(pt, Xpts, X.get_data());
+    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi.get_data());
+    basis::template interpFields<3, 3>(pt, fn, n0.get_data());
     basis::template interpFields<1, 1>(pt, etn, &et);
 
     // Compute the transformation at the quadrature point
-    transform->computeTransform(Xxi, n0, T);
+    transform->computeTransform(Xxi.get_data(), n0.get_data(), T.get_data());
 
     // Evaluate the displacement gradient at the point
-    TacsScalar XdinvT[9], XdinvzT[9];
-    TacsScalar u0x[9], u1x[9];
-    TacsScalar detXd = TacsShellComputeDispGrad<vars_per_node, basis>(
-        pt, Xpts, vars, fn, d, Xxi, n0, T, XdinvT, XdinvzT, u0x, u1x);
+    A2D::Mat<TacsScalar, 3, 3> XdinvT, XdinvzT, u0x, u1x;
+    TacsScalar detXd; // can we setup scalars like this in new vs A2D?
+    detXd = TacsShellComputeDispGrad<vars_per_node, basis>(
+        pt, Xpts, vars, fn, d, Xxi.get_data(), n0.get_data(), T.get_data(), 
+        XdinvT.get_data(), XdinvzT.get_data(), u0x.get_data(), u1x.get_data());
     detXd *= weight;
 
     // Evaluate the tying components of the strain
-    TacsScalar gty[6];  // The symmetric components of the tying strain
+    // gty might not need to be A2D obj here
+    // A2D::SymMat<TacsScalar, 3> gty; // The symmetric components of the tying strain
+    TacsScalar gty[6];
     basis::interpTyingStrain(pt, ety, gty);
 
     // Compute the symmetric parts of the tying strain
+    // e0ty might not need to be A2D obj here
+    // A2D::SymMat<TacsScalar, 3> e0ty;
     TacsScalar e0ty[6];  // e0ty = XdinvT^{T}*gty*XdinvT
-    mat3x3SymmTransformTranspose(XdinvT, gty, e0ty);
+    mat3x3SymmTransformTranspose(XdinvT.get_data(), gty, e0ty);
 
     // Compute the set of strain components
+    // based on beam element code => may not need A2D obj for strain
     TacsScalar e[9];  // The components of the strain
-    model::evalStrain(u0x, u1x, e0ty, e);
+    model::evalStrain(u0x.get_data(), u1x.get_data(), e0ty, e);
     e[8] = et;
 
     // Compute the corresponding stresses
+    // based on beam element code => may not need A2D obj for stress
     TacsScalar s[9];
-    con->evalStress(elemIndex, pt, X, e, s);
+    con->evalStress(elemIndex, pt, X.get_data(), e, s);
 
     Uelem +=
         0.5 * detXd *
@@ -277,17 +297,22 @@ void TACSShellElementOrig<quadrature, basis, director, model>::computeEnergies(
 
     // Evaluate the mass moments
     TacsScalar moments[3];
-    con->evalMassMoments(elemIndex, pt, X, moments);
+    con->evalMassMoments(elemIndex, pt, X.get_data(), moments);
 
     // Compute the velocities and the director velocities
-    TacsScalar u0dot[3], d0dot[3];
-    basis::template interpFields<vars_per_node, 3>(pt, dvars, u0dot);
-    basis::template interpFields<3, 3>(pt, ddot, d0dot);
+    A2D::Vec<TacsScalar, 3> u0dot, d0dot;
+    // TacsScalar u0dot[3], d0dot[3];
+    basis::template interpFields<vars_per_node, 3>(pt, dvars, u0dot.get_data());
+    basis::template interpFields<3, 3>(pt, ddot, d0dot.get_data());
 
-    Telem += 0.5 * detXd *
-             (moments[0] * vec3Dot(u0dot, u0dot) +
-              2.0 * moments[1] * vec3Dot(u0dot, d0dot) +
-              moments[2] * vec3Dot(d0dot, d0dot));
+    Telem += 0.5 * detXd * 
+              (moments[0] * A2D_VecDot(u0dot, u0dot) +
+              2.0 * moments[1] * A2D_VecDot(u0dot, d0dot) +
+              moments[2] * A2D_VecDot(d0dot, d0dot));
+    // Telem += 0.5 * detXd *
+    //          (moments[0] * vec3Dot(u0dot, u0dot) +
+    //           2.0 * moments[1] * vec3Dot(u0dot, d0dot) +
+    //           moments[2] * vec3Dot(d0dot, d0dot));
   }
 
   *Te = Telem;
@@ -298,7 +323,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::computeEnergies(
   Add the residual to the provided vector
 */
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::addResidual(
+void TACSShellElement<quadrature, basis, director, model>::addResidual(
     int elemIndex, double time, const TacsScalar Xpts[],
     const TacsScalar vars[], const TacsScalar dvars[],
     const TacsScalar ddvars[], TacsScalar res[]) {
@@ -336,85 +361,158 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addResidual(
 
   // Loop over each quadrature point and add the residual contribution
   for (int quad_index = 0; quad_index < nquad; quad_index++) {
+
     // Get the quadrature weight
     double pt[3];
     double weight = quadrature::getQuadraturePoint(quad_index, pt);
 
-    // Compute X, X,xi and the interpolated normal n0
-    TacsScalar X[3], Xxi[6], n0[3], T[9], et;
-    basis::template interpFields<3, 3>(pt, Xpts, X);
-    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-    basis::template interpFields<3, 3>(pt, fn, n0);
-    basis::template interpFields<1, 1>(pt, etn, &et);
+    // interpolation section
+    // ----------------------------------------
+
+    // passive A2D Objs used in interpolation
+    A2D::Vec<TacsScalar,3> X, n0;
+    A2D::Mat<TacsScalar,3,2> Xxi, nxi;
+    A2D::Mat<TacsScalar,3,3> T;
+    // A2D::SymMat<TacsScalar,3> gty;
+    
+    // active A2D objs used in interpolation
+    A2D::ADObj<A2D::Vec<TacsScalar,1>> et;
+    A2D::ADObj<A2D::Vec<TacsScalar,3>> d0;
+    A2D::ADObj<A2D::Mat<TacsScalar,3,2>> d0xi, u0xi;
+    A2D::ADObj<A2D::SymMat<TacsScalar,3>> e0ty, e0ty_tmp, gty;
+
+    // interpolate coordinates, director, midplane displacements with the basis
+    basis::template interpFields<3, 3>(pt, Xpts, X.get_data());
+    basis::template interpFields<3, 3>(pt, fn, n0.get_data());
+    basis::template interpFields<1, 1>(pt, etn, et.value().get_data());
+    basis::template interpFields<3, 3>(pt, d, d0.value().get_data());
+
+    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi.get_data());
+    basis::template interpFieldsGrad<3, 3>(pt, fn, nxi.get_data());
+    basis::template interpFieldsGrad<3, 3>(pt, d, d0xi.value().get_data());
+    basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi.value().get_data());
+
+    basis::interpTyingStrain(pt, ety, gty.value().get_data());
+
+    // setup before A2D strain energy stack
+    // ------------------------------------
 
     // Compute the transformation at the quadrature point
-    transform->computeTransform(Xxi, n0, T);
+    transform->computeTransform(Xxi.get_data(), n0.get_data(), T.get_data()); 
 
-    // Evaluate the displacement gradient at the point
-    TacsScalar XdinvT[9], XdinvzT[9];
-    TacsScalar u0x[9], u1x[9];
-    TacsScalar detXd = TacsShellComputeDispGrad<vars_per_node, basis>(
-        pt, Xpts, vars, fn, d, Xxi, n0, T, XdinvT, XdinvzT, u0x, u1x);
-    detXd *= weight;
+    // compute ABD matrix from shell theory (prospective)
+    // A2D::SymMat<TacsScalar,9> ABD; // normally ABD is 6x6, but this one includes transverse shear and drill strains
+    A2D::Mat<TacsScalar,9,9> ABD;
+    con->getABDmatrix(0, pt, X.get_data(), ABD.get_data()); // TODO make this routine
 
-    // Evaluate the tying components of the strain
-    TacsScalar gty[6];  // The symmetric components of the tying strain
-    basis::interpTyingStrain(pt, ety, gty);
+    // passive variables for strain energy stack
+    A2D::Vec<TacsScalar, 3> zero;
+    A2D::ADObj<A2D::Mat<TacsScalar, 3, 3>> Xd, Xdz, Xdinv, XdinvT;
 
-    // Compute the symmetric parts of the tying strain
-    TacsScalar e0ty[6];  // e0ty = XdinvT^{T}*gty*XdinvT
-    mat3x3SymmTransformTranspose(XdinvT, gty, e0ty);
+    // active variables for strain energy stack
+    A2D::ADObj<TacsScalar> detXd, ES_dot, Uelem;
+    A2D::ADObj<A2D::Vec<TacsScalar,9>> E, S;
+    A2D::ADObj<A2D::Mat<TacsScalar, 3, 3>> u0x_tmp, u1x_tmp1, u1x_tmp2, u1x_tmp3, u1x_term1, u1x_term2, u1x_sum; // temp variables
+    A2D::ADObj<A2D::Mat<TacsScalar, 3, 3>> u0xi_frame, u1xi_frame, u0x, u1x;
 
-    // Compute the set of strain components
-    TacsScalar e[9];  // The components of the strain
-    model::evalStrain(u0x, u1x, e0ty, e);
-    e[8] = et;
+    const A2D::MatOp NORMAL = A2D::MatOp::NORMAL, TRANSPOSE = A2D::MatOp::TRANSPOSE;
+    const A2D::ShellStrainType STRAIN_TYPE = A2D::ShellStrainType::LINEAR; // if condition on type of model here..
 
-    // Compute the corresponding stresses
-    TacsScalar s[9];
-    con->evalStress(elemIndex, pt, X, e, s);
+    // TODO : fix order of MatRotateFrame (backwards)
+    auto prelim_coord_stack = A2D::MakeStack(
+      A2D::ShellAssembleFrame(Xxi, n0, Xd), 
+      A2D::ShellAssembleFrame(nxi, zero, Xdz), 
+      A2D::MatInv(Xd, Xdinv),
+      A2D::MatDet(Xd, detXd),
+      A2D::MatMatMult(Xdinv, T, XdinvT)
+    ); // auto evaluates on runtime
+    // want this to not be included in Hessian/gradient backprop
 
-    // Compute the derivative of the product of the stress and strain
-    // with respect to u0x, u1x and e0ty
-    TacsScalar du0x[9], du1x[9], de0ty[6];
-    model::evalStrainSens(detXd, s, u0x, u1x, du0x, du1x, de0ty);
+    // printf("detXd = %.8e\n", detXd.value());
+    // for (int i = 0; i < 9; i++) {
+    //   printf("Xd[%d] = %.8e\n", i, Xd.value().get_data()[i]);
+    //   printf("Xdz[%d] = %.8e\n", i, Xdz.value().get_data()[i]);
+    //   printf("Xdinv[%d] = %.8e\n", i, Xdinv.value().get_data()[i]);
+    //   printf("XdinvT[%d] = %.8e\n", i, XdinvT.value().get_data()[i]);     
+    // }
 
-    // Add the contribution to the drilling strain
-    TacsScalar det = detXd * s[8];
-    basis::template addInterpFieldsTranspose<1, 1>(pt, &det, detn);
+    // compute the strain energy from d0, d0xi, u0xi
+    auto strain_energy_stack = A2D::MakeStack(
+      // part 1 - compute shell basis and transform matrices (passive portion)
+      A2D::ShellAssembleFrame(u0xi, d0, u0xi_frame),
+      A2D::ShellAssembleFrame(d0xi, zero, u1xi_frame),
+      // part 2 - compute u0x midplane disp gradient
+      A2D::MatMatMult(u0xi_frame, Xdinv, u0x_tmp),
+      A2D::MatRotateFrame(T, u0x_tmp, u0x),
+      // part 3 - compute u1x director disp gradient
+      A2D::MatMatMult(u1xi_frame, Xdinv, u1x_term1),
+      // computes u0xi_frame * Xdinv * Xdz * Xdinv => u1x_term2 
+      A2D::MatMatMult(u0xi_frame, Xdinv, u1x_tmp1), 
+      A2D::MatMatMult(u1x_tmp1, Xdz, u1x_tmp2), 
+      A2D::MatMatMult(u1x_tmp2, Xdinv, u1x_term2),
+      // compute final u1x = T^T * (u0x * Xdinv - u1x * Xdinv * Xdz * Xdinv) * T
+      A2D::MatSum(1.0, u1x_term1, -1.0, u1x_term2, u1x_sum), // for some reason this entry has no hzero?
+      A2D::MatRotateFrame(T, u1x_sum, u1x),
+      // part 4 - compute transformed tying strain e0ty
+      A2D::SymMatRotateFrame(XdinvT, gty, e0ty),
+      // part 5 - compute strains, stresses and then strain energy
+      A2D::ShellStrain<STRAIN_TYPE>(u0x, u1x, e0ty, et, E),
+      A2D::MatVecMult(ABD, E, S),
+      // part 6 - compute strain energy
+      A2D::VecDot(E, S, ES_dot),
+      A2D::Eval(0.5 * weight * detXd * ES_dot, Uelem)
+    );
 
-    // Add the contributions to the residual from du0x, du1x and dCt
-    TacsShellAddDispGradSens<vars_per_node, basis>(pt, T, XdinvT, XdinvzT, du0x,
-                                                   du1x, res, dd);
+    // reverse mode AD for the strain energy stack
+    // -------------------------------------------------
+    Uelem.bvalue() = 1.0;
+    strain_energy_stack.reverse();
 
-    // Compute the of the tying strain w.r.t. derivative w.r.t. the coefficients
-    TacsScalar dgty[6];
-    mat3x3SymmTransformTransSens(XdinvT, de0ty, dgty);
+    // reverse through the basis back to the director class, drill strain, tying strain
+    basis::template addInterpFieldsTranspose<1, 1>(pt, et.bvalue().get_data(), detn);
+    basis::template addInterpFieldsTranspose<3, 3>(pt, d0.bvalue().get_data(), dd);
 
-    // Evaluate the tying strain
-    basis::addInterpTyingStrainTranspose(pt, dgty, dety);
+    basis::template addInterpFieldsGradTranspose<3, 3>(pt, d0xi.bvalue().get_data(), dd);
+    basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, u0xi.bvalue().get_data(), res);
 
-    // Evaluate the mass moments
-    TacsScalar moments[3];
-    con->evalMassMoments(elemIndex, pt, X, moments);
+    basis::addInterpTyingStrainTranspose(pt, gty.bvalue().get_data(), dety);
 
-    // Evaluate the second time derivatives
-    TacsScalar u0ddot[3], d0ddot[3];
-    basis::template interpFields<vars_per_node, 3>(pt, ddvars, u0ddot);
-    basis::template interpFields<3, 3>(pt, dddot, d0ddot);
+    // setup before kinetic energy stack
+    // ------------------------------------
 
-    // Add the contributions to the derivative
-    TacsScalar du0dot[3];
-    du0dot[0] = detXd * (moments[0] * u0ddot[0] + moments[1] * d0ddot[0]);
-    du0dot[1] = detXd * (moments[0] * u0ddot[1] + moments[1] * d0ddot[1]);
-    du0dot[2] = detXd * (moments[0] * u0ddot[2] + moments[1] * d0ddot[2]);
-    basis::template addInterpFieldsTranspose<vars_per_node, 3>(pt, du0dot, res);
+    // passive variables
+    A2D::Vec<TacsScalar,3> moments, u0ddot, d0ddot;
 
-    TacsScalar dd0dot[3];
-    dd0dot[0] = detXd * (moments[1] * u0ddot[0] + moments[2] * d0ddot[0]);
-    dd0dot[1] = detXd * (moments[1] * u0ddot[1] + moments[2] * d0ddot[1]);
-    dd0dot[2] = detXd * (moments[1] * u0ddot[2] + moments[2] * d0ddot[2]);
-    basis::template addInterpFieldsTranspose<3, 3>(pt, dd0dot, dd);
+    // active variables
+    A2D::ADObj<TacsScalar> uu_term, ud_term1, ud_term2, dd_term, dTelem_dt;
+    A2D::ADObj<A2D::Vec<TacsScalar,3>> u0dot, d0dot;
+
+    // evaluate mass moments
+    con->evalMassMoments(elemIndex, pt, X.get_data(), moments.get_data());
+    // interpolate first time derivatives
+    basis::template interpFields<vars_per_node, 3>(pt, dvars, u0dot.value().get_data());
+    basis::template interpFields<3, 3>(pt, ddot, d0dot.value().get_data());
+    // interpolate second time derivatives
+    basis::template interpFields<vars_per_node, 3>(pt, ddvars, u0ddot.get_data());
+    basis::template interpFields<3, 3>(pt, dddot, d0ddot.get_data());
+
+    // due to integration by parts, residual is based on dT/dt, time derivative of KE so 1st and 2nd time derivatives used
+    //   double check: but Jacobian should be obtained with a cross Hessian d^2(dT/dt)/du0dot/du0ddot (and same for directors d0)
+    auto kinetic_energy_stack = A2D::MakeStack(
+      A2D::VecDot(u0dot, u0ddot, uu_term),
+      A2D::VecDot(u0dot, d0ddot, ud_term1),
+      A2D::VecDot(u0ddot, d0dot, ud_term2),
+      A2D::VecDot(d0dot, d0ddot, dd_term),
+      Eval(detXd * (moments[0] * uu_term + moments[1] * (ud_term1 + ud_term2) + moments[2] * dd_term), dTelem_dt)
+    );
+
+    // now reverse to from dTelem_dt => u0dot, d0dot sensitivities
+    dTelem_dt.bvalue() = 1.0;
+    kinetic_energy_stack.reverse();
+
+    // backpropagate the time derivatives to the residual
+    basis::template addInterpFieldsTranspose<vars_per_node, 3>(pt, u0dot.bvalue().get_data(), res);
+    basis::template addInterpFieldsTranspose<3, 3>(pt, d0dot.value().get_data(), dd);
   }
 
   // Add the contribution to the residual from the drill strain
@@ -435,17 +533,17 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addResidual(
       vars, res);
 }
 
-/*
-  Add the contributions to the residual and Jacobian matrix
-*/
+// 
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::addJacobian(
+void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     int elemIndex, double time, TacsScalar alpha, TacsScalar beta,
     TacsScalar gamma, const TacsScalar Xpts[], const TacsScalar vars[],
     const TacsScalar dvars[], const TacsScalar ddvars[], TacsScalar res[],
     TacsScalar mat[]) {
   // Compute the number of quadrature points
   const int nquad = quadrature::getNumQuadraturePoints();
+
+  // printf("Begin addJacobian.. \n");
 
   // Derivative of the director field
   TacsScalar dd[dsize];
@@ -494,189 +592,293 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addJacobian(
 
   // Set the total number of tying points needed for this element
   TacsScalar ety[basis::NUM_TYING_POINTS];
-  model::template computeTyingStrain<vars_per_node, basis>(Xpts, fn, vars, d,
-                                                           ety);
+  model::template computeTyingStrain<vars_per_node, basis>(Xpts, fn, vars, d, ety);
 
   // Loop over each quadrature point and add the residual contribution
   for (int quad_index = 0; quad_index < nquad; quad_index++) {
+    
     // Get the quadrature weight
     double pt[3];
     double weight = quadrature::getQuadraturePoint(quad_index, pt);
 
-    // Compute X, X,xi and the interpolated normal n0
-    TacsScalar X[3], Xxi[6], n0[3], T[9], et;
-    basis::template interpFields<3, 3>(pt, Xpts, X);
-    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-    basis::template interpFields<3, 3>(pt, fn, n0);
-    basis::template interpFields<1, 1>(pt, etn, &et);
+    // printf("iquad = %d\n", quad_index);
 
-    // Compute the transformation at the quadrature point
-    transform->computeTransform(Xxi, n0, T);
+    // interpolation section
+    // ----------------------------------------
 
-    // Evaluate the displacement gradient at the point
-    TacsScalar XdinvT[9], XdinvzT[9];
-    TacsScalar u0x[9], u1x[9];
-    TacsScalar detXd = TacsShellComputeDispGrad<vars_per_node, basis>(
-        pt, Xpts, vars, fn, d, Xxi, n0, T, XdinvT, XdinvzT, u0x, u1x);
-    detXd *= weight;
+    // passive A2D Objs used in interpolation
+    A2D::Vec<TacsScalar,3> X, n0;
+    A2D::Mat<TacsScalar,3,2> Xxi, nxi;
+    A2D::Mat<TacsScalar,3,3> T;
+    
+    // active A2D objs used in interpolation
+    A2D::A2DObj<A2D::Vec<TacsScalar,1>> et;
+    A2D::A2DObj<A2D::Vec<TacsScalar,3>> d0;
+    A2D::A2DObj<A2D::Mat<TacsScalar,3,2>> d0xi, u0xi;
+    A2D::A2DObj<A2D::SymMat<TacsScalar,3>> e0ty, e0ty_tmp;    
 
-    // Evaluate the tying components of the strain
-    TacsScalar gty[6];  // The symmetric components of the tying strain
+    // interpolate coordinates, director, midplane displacements with the basis
+    // tried interpolating U,d => d0, d0xi, u0xi in main stack, but this doesn't help much because need d2gtyu0xi somewhere else
+    basis::template interpFields<3, 3>(pt, Xpts, X.get_data());
+    basis::template interpFields<3, 3>(pt, fn, n0.get_data());
+    basis::template interpFields<1, 1>(pt, etn, et.value().get_data());
+    basis::template interpFields<3, 3>(pt, d, d0.value().get_data());
+
+    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi.get_data());
+    basis::template interpFieldsGrad<3, 3>(pt, fn, nxi.get_data());
+    basis::template interpFieldsGrad<3, 3>(pt, d, d0xi.value().get_data());
+    basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi.value().get_data());
+
+    // too hard to interpolate since different # of tying points for each gij entry
+    TacsScalar gty[6];
     basis::interpTyingStrain(pt, ety, gty);
 
-    // debug print out intermediate states for interpolations up to this point
-    // printf("et = %.8e\n", et);
-    // for (int i = 0; i < 3; i++) {
-    //   printf("X[%d] = %.8e\n", i, X[i]);
-    //   printf("n0[%d] = %.8e\n", i, n0[i]);
-    //   // printf("d0[%d] = %.8e\n", i, d0[i]);
-    // }
-    // for (int j = 0; j < 6; j++) {
-    //   printf("Xxi[%d] = %.8e\n", j, Xxi[j]);
-    //   // printf("nxi[%d] = %.8e\n", j, nxi[j]);
-    //   // printf("d0xi[%d] = %.8e\n", j, d0xi[j]);
-    //   printf("gty[%d] = %.8e\n", j, gty[j]);
-    // }
-    // for (int j = 0; j < 6; j++) {
-    //   printf("gty[%d] = %.8e\n", j, gty[j]);
-    // }
-    // // for (int k = 0; k < 12; k++) {
-    // //   printf("u0xi[%d] = %.8e\n", k, u0xi[k]);
-    // // }
+    // setup before A2D strain energy stack
+    // ------------------------------------
 
-    // Compute the symmetric parts of the tying strain
-    TacsScalar e0ty[6];  // e0ty = XdinvT^{T}*gty*XdinvT
-    mat3x3SymmTransformTranspose(XdinvT, gty, e0ty);
+    // Compute the transformation at the quadrature point
+    transform->computeTransform(Xxi.get_data(), n0.get_data(), T.get_data()); 
 
-    // for (int j = 0; j < 6; j++) {
-    //   printf("e0ty[%d] = %.8e\n", j, e0ty[j]);
-    // }
+    // compute ABD matrix from shell theory (prospective)
+    // A2D::SymMat<TacsScalar,9> ABD; // normally ABD is 6x6, but this one includes transverse shear and drill strains
+    A2D::Mat<TacsScalar,9,9> ABD; // A2D doesn't handle mixed symmat * vec well right now..
+    con->getABDmatrix(0, pt, X.get_data(), ABD.get_data()); // TODO make this routine
 
-    // Compute the set of strain components
-    TacsScalar e[9];  // The components of the strain
-    model::evalStrain(u0x, u1x, e0ty, e);
-    e[8] = et;
+    // passive variables for strain energy stack
+    A2D::Vec<TacsScalar, 3> zero;
 
-    // Compute the tangent stiffness matrix
-    TacsScalar Cs[TACSShellConstitutive::NUM_TANGENT_STIFFNESS_ENTRIES];
-    con->evalTangentStiffness(elemIndex, pt, X, Cs);
+    // active variables for strain energy stack
+    A2D::A2DObj<TacsScalar> detXd, ES_dot, Uelem;
 
-    TacsScalar drill;
-    const TacsScalar *A, *B, *D, *As;
-    TACSShellConstitutive::extractTangentStiffness(Cs, &A, &B, &D, &As, &drill);
+    // A2D::Mat<TacsScalar, 3, 3> Xd, Xdz, Xdinv, XdinvT;
+    A2D::A2DObj<A2D::Mat<TacsScalar, 3, 3>> Xd, Xdz, Xdinv, XdinvT;
 
-    // Compute the stress based on the tangent stiffness
-    TacsScalar s[9];
-    TACSShellConstitutive::computeStress(A, B, D, As, drill, e, s);
+    A2D::A2DObj<A2D::Vec<TacsScalar,9>> E, S;
+    A2D::A2DObj<A2D::Mat<TacsScalar, 3, 3>> u0x_tmp, u1x_tmp1, u1x_tmp2, u1x_tmp3, u1x_term1, u1x_term2, u1x_sum; // temp variables
+    A2D::A2DObj<A2D::Mat<TacsScalar, 3, 3>> u0xi_frame, u1xi_frame, u0x, u1x;
 
-    // Compute the derivative of the product of the stress and strain
-    // with respect to u0x, u1x and e0ty
-    TacsScalar du0x[9], du1x[9], de0ty[6];
-    model::evalStrainSens(detXd, s, u0x, u1x, du0x, du1x, de0ty);
+    const A2D::MatOp NORMAL = A2D::MatOp::NORMAL, TRANSPOSE = A2D::MatOp::TRANSPOSE;
+    const A2D::ShellStrainType STRAIN_TYPE = A2D::ShellStrainType::LINEAR; // if condition on type of model here..
 
-    // for (int j = 0; j < 6; j++) {
-    //   printf("e0ty[%d] = %.8e\n", j, e0ty[j]);
-    // }
-    // for (int i = 0; i < 9; i++) {
-    //   printf("u0x[%d] = %.8e\n", i, u0x[i]);
-    //   printf("u1x[%d] = %.8e\n", i, u1x[i]);
-    //   printf("E[%d] = %.8e\n", i, e[i]);
-    //   printf("S[%d] = %.8e\n", i, s[i]);
-    // }
-    // for debugging purposes
-    TacsScalar Uelem =
-        0.5 * detXd *
-        (s[0] * e[0] + s[1] * e[1] + s[2] * e[2] + s[3] * e[3] + s[4] * e[4] +
-         s[5] * e[5] + s[6] * e[6] + s[7] * e[7] + s[8] * e[8]);
-    // printf("Uelem = %.8e\n", Uelem);
 
-    TacsScalar d2u0x[81], d2u1x[81], d2u0xu1x[81];
-    TacsScalar d2e0ty[36], d2e0tyu0x[54], d2e0tyu1x[54];
-    model::evalStrainHessian(alpha * detXd, s, Cs, u0x, u1x, e0ty, d2u0x, d2u1x,
-                             d2u0xu1x, d2e0ty, d2e0tyu0x, d2e0tyu1x);
+    auto prelim_coord_stack = A2D::MakeStack(
+      A2D::ShellAssembleFrame(Xxi, n0, Xd), 
+      A2D::ShellAssembleFrame(nxi, zero, Xdz), 
+      A2D::MatInv(Xd, Xdinv),
+      A2D::MatDet(Xd, detXd),
+      A2D::MatMatMult(Xdinv, T, XdinvT)
+    ); // auto evaluates on runtime
 
-    // Add the contributions to the residual from du0x and du1x
-    TacsScalar det = detXd * s[8];
-    basis::template addInterpFieldsTranspose<1, 1>(pt, &det, detn);
+    // compute e0ty from gty (this was buggy step still need to fix with SymMatRotateFrame in stack => so pulled out for now)
+    mat3x3SymmTransformTranspose(XdinvT.value().get_data(), gty, e0ty.value().get_data());
 
-    // debug first order derivs
-    // printf("det %.8e\n", det);
+    // compute the strain energy from d0, d0xi, u0xi
+    auto strain_energy_stack = A2D::MakeStack(
+      // part 1 - compute shell basis and transform matrices (passive portion)
+      A2D::ShellAssembleFrame(u0xi, d0, u0xi_frame),
+      A2D::ShellAssembleFrame(d0xi, zero, u1xi_frame),
+      // part 2 - compute u0x midplane disp gradient
+      A2D::MatMatMult(u0xi_frame, Xdinv, u0x_tmp),
+      A2D::MatRotateFrame(T, u0x_tmp, u0x),
+      // part 3 - compute u1x director disp gradient
+      A2D::MatMatMult(u1xi_frame, Xdinv, u1x_term1),
+      // computes u0xi_frame * Xdinv * Xdz * Xdinv => u1x_term2 
+      A2D::MatMatMult(u0xi_frame, Xdinv, u1x_tmp1), 
+      A2D::MatMatMult(u1x_tmp1, Xdz, u1x_tmp2), 
+      A2D::MatMatMult(u1x_tmp2, Xdinv, u1x_term2),
+      // compute final u1x = T^T * (u0x * Xdinv - u1x * Xdinv * Xdz * Xdinv) * T
+      A2D::MatSum(1.0, u1x_term1, -1.0, u1x_term2, u1x_sum), // for some reason this entry has no hzero?
+      A2D::MatRotateFrame(T, u1x_sum, u1x),
+      // part 4 - compute strains, stresses and then strain energy
+      A2D::ShellStrain<STRAIN_TYPE>(u0x, u1x, e0ty, et, E),
+      A2D::MatVecMult(ABD, E, S),
+      // part 5 - compute strain energy
+      A2D::VecDot(E, S, ES_dot),
+      A2D::Eval(0.5 * weight * detXd * ES_dot, Uelem)
+    );
 
-    TacsShellAddDispGradSens<vars_per_node, basis>(pt, T, XdinvT, XdinvzT, du0x,
-                                                   du1x, res, dd);
+    printf("Uelem = %.8e\n", Uelem.value());
 
-    // Add the contribution from the drilling stiffness
-    TacsScalar d2et = detXd * alpha * Cs[21];
-    basis::template addInterpFieldsOuterProduct<1, 1, 1, 1>(pt, &d2et, d2etn);
+    // reverse mode 1st order AD for the strain energy stack
+    // -------------------------------------------------
+    Uelem.bvalue() = 1.0;
+    Uelem.hvalue() = 0.0;
 
-    // printf("d2et = %.8e\n", d2et);
+    // reverse mode 1st + 2nd order AD for the strain energy stack
+    // -----------------------------------------------------
 
-    // Add the contributions to the residual from du0x, du1x and dCt
-    TacsShellAddDispGradHessian<vars_per_node, basis>(
-        pt, T, XdinvT, XdinvzT, d2u0x, d2u1x, d2u0xu1x, mat, d2d, d2du);
+    // create submatrix Hessian matrices
+    A2D::Mat<TacsScalar,1,1> d2et;
+    A2D::Mat<TacsScalar, 3, 3> d2d0;
+    A2D::Mat<TacsScalar, 3, 6> d2d0d0xi, d2d0u0xi;
+    A2D::Mat<TacsScalar, 6, 3> d2e0tyd0;
+    A2D::Mat<TacsScalar, 6, 6> d2d0xi, d2d0xiu0xi, d2u0xi, d2e0ty, d2e0tyd0xi, d2e0tyu0xi;
 
-    // Compute the of the tying strain w.r.t. derivative w.r.t. the coefficients
-    TacsScalar dgty[6], d2gty[36];
-    mat3x3SymmTransformTransSens(XdinvT, de0ty, dgty);
-    mat3x3SymmTransformTransHessian(XdinvT, d2e0ty, d2gty);
+    // group all inputs relevant to disps : d0, d0xi, u0xi, e0ty, et
+    const int ncomp = 22;
+    A2D::SymMat<TacsScalar, ncomp> hess;
+    auto in = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::p>(d0, d0xi, u0xi, e0ty, et);
+    auto out = A2D::MakeTieTuple<TacsScalar, A2D::ADseed::h>(d0, d0xi, u0xi, e0ty, et);
+    strain_energy_stack.hextract(in, out, hess);
+    
+    // reverse through the basis back to the director class, drill strain, tying strain
+    basis::template addInterpFieldsTranspose<1, 1>(pt, et.bvalue().get_data(), detn);
+    basis::template addInterpFieldsTranspose<3, 3>(pt, d0.bvalue().get_data(), dd);
 
-    // // debug first order derivs part 2
-    // for (int k = 0; k < 6; k++) {
-    //   printf("de0ty[%d] %.8e\n", k, de0ty[k]);
-    //   printf("dgty[%d] %.8e\n", k, dgty[k]);
-    // }
+    basis::template addInterpFieldsGradTranspose<3, 3>(pt, d0xi.bvalue().get_data(), dd);
+    basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, u0xi.bvalue().get_data(), res);
 
-    // for (int i8 = 0; i8 < 36; i8++) {
-    //   printf("d2e0ty[%d] = %.8e\n", i8, d2e0ty[i8]);
-    // }
-    // for (int i8 = 0; i8 < 36; i8++) {
-    //   printf("d2gty[%d] = %.8e\n", i8, d2gty[i8]);
-    // }
-
-    // Evaluate the tying strain
+    TacsScalar dgty[6];
+    mat3x3SymmTransformTransSens(XdinvT.value().get_data(), e0ty.bvalue().get_data(), dgty);
     basis::addInterpTyingStrainTranspose(pt, dgty, dety);
-    basis::addInterpTyingStrainHessian(pt, d2gty, d2ety);
 
-    // Add the coupling between the displacement and tying strain
-    TacsShellAddTyingDispCoupling<basis>(pt, T, XdinvT, XdinvzT, d2e0tyu0x,
-                                         d2e0tyu1x, d2etyu, d2etyd);
+    // copy values from full hessian into submatrix-Hessians
+    // could add A2D routines to extract submatrices in the future using upper, lower bounds maybe?
+    for (int irow = 0; irow < 22; irow++) {
+      for (int icol = 0; icol < 22; icol++) {
+        // start of large irow if block
+        if (irow < 3) { // d0 rows
+          if (icol < 3) { // d0 cols
+            d2d0(irow, icol) = hess(irow,icol);
+          } else if (3 <= icol && icol < 9) { // d0xi cols
+            d2d0d0xi(irow, icol-3) = hess(irow,icol);
+          } else if (9 <= icol && icol < 15) { // u0xi cols
+            d2d0xiu0xi(irow, icol-9) = hess(irow, icol);
+          }
+        } else if (3 <= irow && irow < 9) { // d0xi rows
+          if (3 <= icol && icol < 9) { // d0xi cols
+            d2d0xi(irow-3, icol-3) = hess(irow,icol);
+          } else if (9 <= icol && icol < 15) { // u0xi calls
+            d2d0xiu0xi(irow-3, icol-9) = hess(irow,icol);
+          }
+        } else if (9 <= irow && irow < 15) { // u0xi rows
+          if (9 <= icol && icol < 15) { // u0xi cols
+            d2u0xi(irow-9, icol-9) = hess(irow,icol);
+          }
+        } else if (15 <= irow && irow < 21) { // e0ty rows
+          if (0 <= icol && icol < 3) { // d0 cols
+            d2e0tyd0(irow, icol-15) = hess(irow,icol);
+          } else if (3 <= icol && icol < 9) { // d0xi cols
+            d2e0tyd0xi(irow-15, icol-3) = hess(irow,icol);
+          } else if (9 <= icol && icol < 15) { // u0xi cols
+            d2e0tyu0xi(irow-15, icol-9) = hess(irow,icol);
+          } else if (15 <= icol && icol < 21) { // gty cols
+            d2e0ty(irow-15, icol-15) = hess(irow, icol);
+            // d2e0ty(irow-15, icol-15) = hess(irow, icol);
+          }
+        } // done with large irow if block 
+      } // end of icol for loop
+    } // end of icol for loop
+    d2et(0,0) = hess(21, 21);
 
-    // Evaluate the mass moments
-    TacsScalar moments[3];
-    con->evalMassMoments(elemIndex, pt, X, moments);
+    // debug compare the 2nd derivatives with orig shell element via printout
+    // in main addJacobian of orig
+    printf("d2et = %.8e\n", d2et.get_data()[0]);
 
-    // Evaluate the second time derivatives
-    TacsScalar u0ddot[3], d0ddot[3];
-    basis::template interpFields<vars_per_node, 3>(pt, ddvars, u0ddot);
-    basis::template interpFields<3, 3>(pt, dddot, d0ddot);
+    // in TacsShellAddDispGradHessian of orig
+    for (int i1 = 0; i1 < 9; i1++) {
+      printf("d2d0[%d] = %.8e\n", i1, d2d0.get_data()[i1]);
+    }
+    for (int i2 = 0; i2 < 18; i2++) {
+      printf("d2d0d0xi[%d] = %.8e\n", i2, d2d0d0xi.get_data()[i2]);
+    }
+    for (int i3 = 0; i3 < 18; i3++) {
+      printf("d2d0u0xi[%d] = %.8e\n", i3, d2d0u0xi.get_data()[i3]);
+    }
+    for (int i5 = 0; i5 < 36; i5++) {
+      printf("d2d0xi[%d] = %.8e\n", i5, d2d0xi.get_data()[i5]);
+    }
+    for (int i6 = 0; i6 < 36; i6++) {
+      printf("d2d0xiu0xi[%d] = %.8e\n", i6, d2d0xiu0xi.get_data()[i6]);
+    }
+    for (int i7 = 0; i7 < 36; i7++) {
+      printf("d2u0xi[%d] = %.8e\n", i7, d2u0xi.get_data()[i7]);
+    }
 
-    // Add the contributions to the derivative
-    TacsScalar du0dot[3];
-    du0dot[0] = detXd * (moments[0] * u0ddot[0] + moments[1] * d0ddot[0]);
-    du0dot[1] = detXd * (moments[0] * u0ddot[1] + moments[1] * d0ddot[1]);
-    du0dot[2] = detXd * (moments[0] * u0ddot[2] + moments[1] * d0ddot[2]);
-    basis::template addInterpFieldsTranspose<vars_per_node, 3>(pt, du0dot, res);
+    for (int i8 = 0; i8 < 36; i8++) {
+      printf("d2e0ty[%d] = %.8e\n", i8, d2e0ty.get_data()[i8]);
+    }
 
-    TacsScalar dd0dot[3];
-    dd0dot[0] = detXd * (moments[1] * u0ddot[0] + moments[2] * d0ddot[0]);
-    dd0dot[1] = detXd * (moments[1] * u0ddot[1] + moments[2] * d0ddot[1]);
-    dd0dot[2] = detXd * (moments[1] * u0ddot[2] + moments[2] * d0ddot[2]);
-    basis::template addInterpFieldsTranspose<3, 3>(pt, dd0dot, dd);
+    // Hessian backprop from quad level to nodes level
+    basis::template addInterpFieldsOuterProduct<1, 1, 1, 1>(pt, d2et.get_data(), d2etn);
+    basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2d0.get_data(), d2d);
+    basis::template addInterpGradOuterProduct<3, 3, 3, 3>(pt, d2d0xi.get_data(), d2d);
+    basis::template addInterpGradMixedOuterProduct<3, 3, 3, 3>(pt, d2d0d0xi.get_data(), d2d0d0xi.get_data(), d2d);
+    basis::template addInterpGradMixedOuterProduct<3, 3, 3, 3>(pt, d2d0u0xi.get_data(), NULL, d2du);
+    basis::template addInterpGradOuterProduct<3, 3, 3, 3>(pt, d2d0xiu0xi.get_data(), d2du);
+    if (mat) {
+      basis::template addInterpGradOuterProduct<vars_per_node, vars_per_node, 3, 3>(pt, d2u0xi.get_data(), mat);
+    }
 
-    TacsScalar d2u0dot[9];
-    memset(d2u0dot, 0, 9 * sizeof(TacsScalar));
-    d2u0dot[0] = d2u0dot[4] = d2u0dot[8] = gamma * detXd * moments[0];
-    basis::template addInterpFieldsOuterProduct<vars_per_node, vars_per_node, 3,
-                                                3>(pt, d2u0dot, mat);
+    TacsScalar d2gty[36];
+    mat3x3SymmTransformTransHessian(XdinvT.value().get_data(), d2e0ty.get_data(), d2gty);
+    basis::addInterpTyingStrainHessian(pt, d2gty, d2ety);  
 
-    TacsScalar d2Td[9];
-    memset(d2Td, 0, 9 * sizeof(TacsScalar));
-    d2Td[0] = d2Td[4] = d2Td[8] = detXd * moments[2];
-    basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2Td, d2Tdotd);
+    for (int i8 = 0; i8 < 36; i8++) {
+      printf("d2gty[%d] = %.8e\n", i8, d2gty[i8]);
+    }
 
-    d2Td[0] = d2Td[4] = d2Td[8] = detXd * moments[1];
-    basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2Td, d2Tdotu);
+    // TODO : need to convert d2e0ty[d0, d0xi, u0xi] to ... similar to TacsShellAddTyingDispCoupling
+    TacsShellAddTyingDispCouplingA2D<basis>(pt, XdinvT.value().get_data(), d2e0tyd0.get_data(),
+                                    d2e0tyu0xi.get_data(), d2e0tyd0xi.get_data(), d2etyu, d2etyd);
+
+    // setup before kinetic energy stack
+    // ------------------------------------
+
+    // passive variables
+    A2D::Vec<TacsScalar,3> moments, u0ddot, d0ddot;
+
+    // active variables
+    A2D::A2DObj<TacsScalar> uu_term, ud_term1, ud_term2, dd_term, dTelem_dt;
+    A2D::A2DObj<A2D::Vec<TacsScalar,3>> u0dot, d0dot;
+
+    // evaluate mass moments
+    con->evalMassMoments(elemIndex, pt, X.get_data(), moments.get_data());
+    // interpolate first time derivatives
+    basis::template interpFields<vars_per_node, 3>(pt, dvars, u0dot.value().get_data());
+    basis::template interpFields<3, 3>(pt, ddot, d0dot.value().get_data());
+    // interpolate second time derivatives
+    basis::template interpFields<vars_per_node, 3>(pt, ddvars, u0ddot.get_data());
+    basis::template interpFields<3, 3>(pt, dddot, d0ddot.get_data());
+
+    // due to integration by parts, residual is based on dT/dt, time derivative of KE so 1st and 2nd time derivatives used
+    //   double check: but Jacobian should be obtained with a cross Hessian d^2(dT/dt)/du0dot/du0ddot (and same for directors d0)
+    auto kinetic_energy_stack = A2D::MakeStack(
+      A2D::VecDot(u0dot, u0ddot, uu_term),
+      A2D::VecDot(u0dot, d0ddot, ud_term1),
+      A2D::VecDot(u0ddot, d0dot, ud_term2),
+      A2D::VecDot(d0dot, d0ddot, dd_term),
+      Eval(detXd * (moments[0] * uu_term + moments[1] * (ud_term1 + ud_term2) + moments[2] * dd_term), dTelem_dt)
+    );
+
+    // now reverse to from dTelem_dt => u0dot, d0dot sensitivities
+    dTelem_dt.bvalue() = 1.0;
+    dTelem_dt.hvalue() = 0.0;
+    kinetic_energy_stack.reverse();
+
+    // backpropagate the time derivatives to the residual
+    basis::template addInterpFieldsTranspose<vars_per_node, 3>(pt, u0dot.bvalue().get_data(), res);
+    basis::template addInterpFieldsTranspose<3, 3>(pt, d0dot.value().get_data(), dd);
+
+    // now get the Hessians (but slightly different formulation here..)
+    A2D::Mat<TacsScalar, 3, 3> d2u0dot, d2u0dotd0dot, d2d0dot, d2u0dot_scaled;
+    kinetic_energy_stack.hextract(u0dot.pvalue(), u0dot.hvalue(), d2u0dot);
+    kinetic_energy_stack.hextract(u0dot.pvalue(), d0dot.hvalue(), d2u0dotd0dot);
+    kinetic_energy_stack.hextract(d0dot.pvalue(), d0dot.hvalue(), d2d0dot);
+    // how to scale d2u0dot by gamma easily?
+    for (int i = 0; i < 9; i++) {
+      d2u0dot_scaled.get_data()[i] = gamma * d2u0dot.get_data()[i];
+    }
+    // A2D::MatScale<TacsScalar, 3, 3>(gamma_, d2u0dot.get_data(), d2u0dot_scaled.get_data());
+
+    basis::template addInterpFieldsOuterProduct<vars_per_node, vars_per_node, 3, 3>(pt, d2u0dot_scaled.get_data(), mat);
+    basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2u0dotd0dot.get_data(), d2Tdotu);
+    basis::template addInterpFieldsOuterProduct<3, 3, 3, 3>(pt, d2d0dot.get_data(), d2Tdotd);
   }
+
+  // printf("Done with quad loop\n");
+
+  // is it possible to A2D the nodal steps? => maybe too hard?
 
   // Add the contribution to the residual from the drill strain
   TacsShellAddDrillStrainHessian<vars_per_node, offset, basis, director, model>(
@@ -701,16 +903,18 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addJacobian(
                                                           mat);
 
   // check the values in the matrix (compare for debug) 
-  // int index = 0;
-  // for (int irow = 0; irow < 24; irow++) {
-  //   for (int icol = 0; icol < 24; icol++, ++index) {
-  //     printf("Kelem[%d,%d] = %.8e\n", irow, icol, mat[index]);
-  //   }
-  // }
+  int index = 0;
+  for (int irow = 0; irow < 24; irow++) {
+    for (int icol = 0; icol < 24; icol++, ++index) {
+      printf("Kelem[%d,%d] = %.8e\n", irow, icol, mat[index]);
+    }
+  }
+
+  // printf("Done with addJacobian on elem %d\n", elemIndex);
 }
 
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::getMatType(
+void TACSShellElement<quadrature, basis, director, model>::getMatType(
     ElementMatrixType matType, int elemIndex, double time,
     const TacsScalar Xpts[], const TacsScalar vars[], TacsScalar mat[]) {
   memset(mat, 0,
@@ -750,6 +954,9 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getMatType(
       norm += vars[i] * vars[i];
     }
 
+    // include thermal path in norm
+    norm += temperature * temperature;
+
     if (TacsRealPart(norm) == 0.0) {
       norm = 1.0;
     } else {
@@ -765,6 +972,11 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getMatType(
       path[i] = dh * vars[i] / norm;
     }
 
+    // temperature perturbation as well (for thermal buckling)
+    TacsScalar my_dh = dh_mag;
+    nlElem->setTemperature(temperature + my_dh * temperature / norm);
+    // printf("temperature1 = %.8e\n", nlElem->getTemperature());
+
     nlElem->addJacobian(elemIndex, time, alpha, beta, gamma, Xpts, path, vars,
                         vars, res, mat);
 
@@ -772,6 +984,10 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getMatType(
     for (int i = 0; i < vars_per_node * num_nodes; i++) {
       path[i] = -dh * vars[i] / norm;
     }
+
+    // temperature perturbation as well (for thermal buckling)
+    nlElem->setTemperature(temperature - my_dh * temperature / norm);
+    // printf("temperature2 = %.8e\n", nlElem->getTemperature());
 
     nlElem->addJacobian(elemIndex, time, -alpha, beta, gamma, Xpts, path, vars,
                         vars, res, mat);
@@ -797,7 +1013,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getMatType(
 }
 
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::addAdjResProduct(
+void TACSShellElement<quadrature, basis, director, model>::addAdjResProduct(
     int elemIndex, double time, TacsScalar scale, const TacsScalar psi[],
     const TacsScalar Xpts[], const TacsScalar vars[], const TacsScalar dvars[],
     const TacsScalar ddvars[], int dvLen, TacsScalar dfdx[]) {
@@ -894,7 +1110,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::addAdjResProduct(
 }
 
 template <class quadrature, class basis, class director, class model>
-int TACSShellElementOrig<quadrature, basis, director, model>::evalPointQuantity(
+int TACSShellElement<quadrature, basis, director, model>::evalPointQuantity(
     int elemIndex, int quantityType, double time, int n, double pt[],
     const TacsScalar Xpts[], const TacsScalar vars[], const TacsScalar dvars[],
     const TacsScalar ddvars[], TacsScalar *detXd, TacsScalar *quantity) {
@@ -1071,7 +1287,7 @@ int TACSShellElementOrig<quadrature, basis, director, model>::evalPointQuantity(
 }
 
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::
+void TACSShellElement<quadrature, basis, director, model>::
     addPointQuantityDVSens(int elemIndex, int quantityType, double time,
                            TacsScalar scale, int n, double pt[],
                            const TacsScalar Xpts[], const TacsScalar vars[],
@@ -1231,7 +1447,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::
 }
 
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::
+void TACSShellElement<quadrature, basis, director, model>::
     addPointQuantitySVSens(int elemIndex, int quantityType, double time,
                            TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
                            int n, double pt[], const TacsScalar Xpts[],
@@ -1334,7 +1550,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::
   Get the element data for the basis
 */
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::getAverageStresses(
+void TACSShellElement<quadrature, basis, director, model>::getAverageStresses(
     int elemIndex, ElementType etype, const TacsScalar Xpts[],
     const TacsScalar vars[], const TacsScalar dvars[],
     const TacsScalar ddvars[], TacsScalar *avgStresses) {
@@ -1425,7 +1641,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getAverageStresse
   Get the element data for the basis
 */
 template <class quadrature, class basis, class director, class model>
-void TACSShellElementOrig<quadrature, basis, director, model>::getOutputData(
+void TACSShellElement<quadrature, basis, director, model>::getOutputData(
     int elemIndex, ElementType etype, int write_flag, const TacsScalar Xpts[],
     const TacsScalar vars[], const TacsScalar dvars[],
     const TacsScalar ddvars[], int ld_data, TacsScalar *data) {
@@ -1545,7 +1761,7 @@ void TACSShellElementOrig<quadrature, basis, director, model>::getOutputData(
 }
 
 template <int vars_per_node, class basis, class model>
-int TacsTestShellTyingStrainOrig(double dh = 1e-7, int test_print_level = 2,
+int TacsTestShellTyingStrain(double dh = 1e-7, int test_print_level = 2,
                              double test_fail_atol = 1e-5,
                              double test_fail_rtol = 1e-5) {
   const int size = vars_per_node * basis::NUM_NODES;
@@ -1816,4 +2032,4 @@ int TacsTestShellTyingStrainOrig(double dh = 1e-7, int test_print_level = 2,
   return fail;
 }
 
-#endif  // TACS_SHELL_ELEMENT_ORIG_H
+#endif  // TACS_SHELL_ELEMENT_H
