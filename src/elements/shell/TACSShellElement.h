@@ -521,7 +521,7 @@ void TACSShellElement<quadrature, basis, director, model>::addResidual(
       Xdn, fn, vars, XdinvTn, Tn, u0xn, Ctn, detn, res);
 
   // Add the contributions from the tying strain
-  model::template addComputeTyingStrainTranspose<vars_per_node, basis>(
+  model::template addComputeTyingStrainTranspose<TacsScalar,vars_per_node, basis>(
       Xpts, fn, vars, d, dety, res, dd);
 
   // Add the contributions to the director field
@@ -552,7 +552,9 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
 
   // set input ADScalar types for variables
   const int N = num_nodes * vars_per_node;
-  using T = A2D::ADScalar<TacsScalar,N>;
+  // using T = A2D::ADScalar<TacsScalar,24>;
+  using T = A2D::ADScalar<double,24>;
+
   T U[N], dU[N], ddU[N], resA2D[N], XptsAD[3*num_nodes];
 
   // TODO : check Kinetic energy part works too
@@ -668,6 +670,8 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     //   printf("XdinvT[%d] = %.8e\n", i, XdinvT.value().get_data()[i]);     
     // }
 
+    using Trev = A2D::ADObj<T>;
+
     // compute the strain energy from d0, d0xi, u0xi
     auto strain_energy_stack = A2D::MakeStack(
       // part 1 - compute shell basis and transform matrices (passive portion)
@@ -692,7 +696,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
       A2D::MatVecMult(ABD, E, S),
       // part 6 - compute strain energy
       A2D::VecDot(E, S, ES_dot),
-      A2D::Eval(T(0.5) * weight * detXd * ES_dot, Uelem)
+      A2D::Eval(Trev(T(0.5) * weight) * detXd * ES_dot, Uelem)
     );
 
     // reverse mode AD for the strain energy stack
@@ -713,7 +717,8 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     // ------------------------------------
 
     // passive variables
-    A2D::Vec<T,3> moments, u0ddot, d0ddot;
+    A2D::Vec<T,3> moments;
+    A2D::ADObj<A2D::Vec<T,3>> u0ddot, d0ddot; // had to make no longer passive just for forward scalar..
 
     // active variables
     A2D::ADObj<T> uu_term, ud_term1, ud_term2, dd_term, dTelem_dt;
@@ -725,8 +730,8 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
     basis::template interpFields<T, vars_per_node, 3>(pt, dU, u0dot.value().get_data());
     basis::template interpFields<T, 3, 3>(pt, ddot, d0dot.value().get_data());
     // interpolate second time derivatives
-    basis::template interpFields<T, vars_per_node, 3>(pt, ddU, u0ddot.get_data());
-    basis::template interpFields<T, 3, 3>(pt, dddot, d0ddot.get_data());
+    basis::template interpFields<T, vars_per_node, 3>(pt, ddU, u0ddot.value().get_data());
+    basis::template interpFields<T, 3, 3>(pt, dddot, d0ddot.value().get_data());
 
     // due to integration by parts, residual is based on dT/dt, time derivative of KE so 1st and 2nd time derivatives used
     //   double check: but Jacobian should be obtained with a cross Hessian d^2(dT/dt)/du0dot/du0ddot (and same for directors d0)
@@ -735,7 +740,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
       A2D::VecDot(u0dot, d0ddot, ud_term1),
       A2D::VecDot(u0ddot, d0dot, ud_term2),
       A2D::VecDot(d0dot, d0ddot, dd_term),
-      Eval(detXd * (moments[0] * uu_term + moments[1] * (ud_term1 + ud_term2) + moments[2] * dd_term), dTelem_dt)
+      Eval(detXd * (Trev(moments[0]) * uu_term + Trev(moments[1]) * (ud_term1 + ud_term2) + Trev(moments[2]) * dd_term), dTelem_dt)
     );
 
     // now reverse to from dTelem_dt => u0dot, d0dot sensitivities
@@ -744,7 +749,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
 
     // backpropagate the time derivatives to the residual
     basis::template addInterpFieldsTranspose<T, vars_per_node, 3>(pt, u0dot.bvalue().get_data(), resA2D);
-    basis::template addInterpFieldsTranspose<T, 3, 3>(pt, d0dot.value().get_data(), dd);
+    basis::template addInterpFieldsTranspose<T, 3, 3>(pt, d0dot.bvalue().get_data(), dd);
   }
 
   // Add the contribution to the residual from the drill strain
@@ -1397,7 +1402,7 @@ void TACSShellElement<quadrature, basis, director, model>::
     basis::addInterpTyingStrainTranspose(pt, dgty, dety);
 
     // Set the total number of tying points needed for this element
-    model::template addComputeTyingStrainTranspose<vars_per_node, basis>(
+    model::template addComputeTyingStrainTranspose<TacsScalar,vars_per_node, basis>(
         Xpts, fn, vars, d, dety, dfdu, dd);
 
     // Add the contributions to the director field
@@ -1691,7 +1696,7 @@ int TacsTestShellTyingStrain(double dh = 1e-7, int test_print_level = 2,
   memset(d2du, 0, dsize * usize * sizeof(TacsScalar));
 
   // Set the total number of tying points needed for this element
-  model::template addComputeTyingStrainTranspose<vars_per_node, basis>(
+  model::template addComputeTyingStrainTranspose<TacsScalar,vars_per_node, basis>(
       Xpts, fn, vars, d, dety, res, dd);
   model::template addComputeTyingStrainHessian<vars_per_node, basis>(
       1.0, Xpts, fn, vars, d, dety, d2ety, d2etyu, d2etyd, mat, d2d, d2du);
@@ -1743,7 +1748,7 @@ int TacsTestShellTyingStrain(double dh = 1e-7, int test_print_level = 2,
     memset(ddt, 0, dsize * sizeof(TacsScalar));
 
     // Set the total number of tying points needed for this element
-    model::template addComputeTyingStrainTranspose<vars_per_node, basis>(
+    model::template addComputeTyingStrainTranspose<TacsScalar,vars_per_node, basis>(
         Xpts, fn, varst, d, detyt, rest, ddt);
 
     for (int j = 0; j < size; j++) {
@@ -1859,7 +1864,7 @@ int TacsTestShellTyingStrain(double dh = 1e-7, int test_print_level = 2,
     memset(ddt, 0, dsize * sizeof(TacsScalar));
 
     // Set the total number of tying points needed for this element
-    model::template addComputeTyingStrainTranspose<vars_per_node, basis>(
+    model::template addComputeTyingStrainTranspose<TacsScalar,vars_per_node, basis>(
         Xpts, fn, vars, dt, detyt, rest, ddt);
 
     for (int j = 0; j < dsize; j++) {

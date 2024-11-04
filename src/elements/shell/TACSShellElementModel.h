@@ -176,8 +176,8 @@ class TACSShellLinearModel {
       double pt[2];
       basis::template getTyingPoint<double>(index, pt);
 
-      basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-      basis::template interpFields<3, 3>(pt, fn, n0);
+      basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, Xpts, Xxi);
+      basis::template interpFields<TacsScalar,3, 3>(pt, fn, n0);
 
       n0 += 3;
       Xxi += 6;
@@ -387,9 +387,9 @@ class TACSShellLinearModel {
 
       // Interpolate the field value
       TacsScalar Uxi[6], Xxi[6], Uxid[6];
-      basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, Uxi);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, varsd, Uxid);
+      basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, Xpts, Xxi);
+      basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, Uxi);
+      basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, varsd, Uxid);
 
       ety[index] = 0.0;
       if (field == TACS_SHELL_G11_COMPONENT) {
@@ -410,9 +410,9 @@ class TACSShellLinearModel {
                    Uxid[1] * Xxi[0] + Uxid[3] * Xxi[2] + Uxid[5] * Xxi[4]);
       } else {
         TacsScalar d0[3], d0d[3], n0[3];
-        basis::template interpFields<3, 3>(pt, d, d0);
-        basis::template interpFields<3, 3>(pt, dd, d0d);
-        basis::template interpFields<3, 3>(pt, fn, n0);
+        basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
+        basis::template interpFields<TacsScalar,3, 3>(pt, dd, d0d);
+        basis::template interpFields<TacsScalar,3, 3>(pt, fn, n0);
 
         if (field == TACS_SHELL_G23_COMPONENT) {
           // Compute g23 = e2^{T}*G*e3
@@ -696,23 +696,23 @@ class TACSShellNonlinearModel {
     }
   }
 
-  template <int vars_per_node, class basis>
+  template <typename T, int vars_per_node, class basis>
   static void addComputeTyingStrainTranspose(
-      const TacsScalar Xpts[], const TacsScalar fn[], const TacsScalar vars[],
-      const TacsScalar d[], const TacsScalar dety[], TacsScalar res[],
-      TacsScalar dd[]) {
+      const T Xpts[], const T fn[], const T vars[],
+      const T d[], const T dety[], T res[],
+      T dd[]) {
     for (int index = 0; index < basis::NUM_TYING_POINTS; index++) {
       // Get the field index
       const TacsShellTyingStrainComponent field = basis::getTyingField(index);
 
       // Get the tying point parametric location
-      double pt[2];
-      basis::template getTyingPoint<double>(index, pt);
+      T pt[2];
+      basis::template getTyingPoint<T>(index, pt);
 
       // Interpolate the field value
-      TacsScalar Uxi[6], Xxi[6], dUxi[6];
-      basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, Uxi);
+      T Uxi[6], Xxi[6], dUxi[6];
+      basis::template interpFieldsGrad<T, 3, 3>(pt, Xpts, Xxi);
+      basis::template interpFieldsGrad<T, vars_per_node, 3>(pt, vars, Uxi);
 
       if (field == TACS_SHELL_G11_COMPONENT) {
         // Compute g11 = e1^{T}*G*e1
@@ -739,9 +739,9 @@ class TACSShellNonlinearModel {
         dUxi[4] = 0.5 * dety[index] * (Xxi[5] + Uxi[5]);
         dUxi[5] = 0.5 * dety[index] * (Xxi[4] + Uxi[4]);
       } else {
-        TacsScalar n0[3], d0[3], dd0[3];
-        basis::template interpFields<3, 3>(pt, d, d0);
-        basis::template interpFields<3, 3>(pt, fn, n0);
+        T n0[3], d0[3], dd0[3];
+        basis::template interpFields<T, 3, 3>(pt, d, d0);
+        basis::template interpFields<T, 3, 3>(pt, fn, n0);
 
         if (field == TACS_SHELL_G23_COMPONENT) {
           // Compute g23 = e2^{T}*G*e3
@@ -768,11 +768,11 @@ class TACSShellNonlinearModel {
           dd0[1] = 0.5 * dety[index] * (Xxi[2] + Uxi[2]);
           dd0[2] = 0.5 * dety[index] * (Xxi[4] + Uxi[4]);
         }
-        basis::template addInterpFieldsTranspose<3, 3>(pt, dd0, dd);
+        basis::template addInterpFieldsTranspose<T, 3, 3>(pt, dd0, dd);
       }
 
       if (res) {
-        basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, dUxi,
+        basis::template addInterpFieldsGradTranspose<T, vars_per_node, 3>(pt, dUxi,
                                                                        res);
       }
     }
@@ -798,10 +798,10 @@ class TACSShellNonlinearModel {
       double pt[2];
       basis::template getTyingPoint<double>(index, pt);
 
-      basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-      basis::template interpFields<3, 3>(pt, fn, n0);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, Uxi);
-      basis::template interpFields<3, 3>(pt, d, d0);
+      basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, Xpts, Xxi);
+      basis::template interpFields<TacsScalar,3, 3>(pt, fn, n0);
+      basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, Uxi);
+      basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
 
       n0 += 3;
       Xxi += 6;
@@ -1045,9 +1045,9 @@ class TACSShellNonlinearModel {
 
       // Interpolate the field value
       TacsScalar Uxi[6], Xxi[6], Uxid[6];
-      basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, Uxi);
-      basis::template interpFieldsGrad<vars_per_node, 3>(pt, varsd, Uxid);
+      basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, Xpts, Xxi);
+      basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, Uxi);
+      basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, varsd, Uxid);
 
       ety[index] = 0.0;
       if (field == TACS_SHELL_G11_COMPONENT) {
@@ -1077,9 +1077,9 @@ class TACSShellNonlinearModel {
                    Uxi[0] * Uxid[1] + Uxi[2] * Uxid[3] + Uxi[4] * Uxid[5]);
       } else {
         TacsScalar n0[3], d0[3], d0d[3];
-        basis::template interpFields<3, 3>(pt, d, d0);
-        basis::template interpFields<3, 3>(pt, dd, d0d);
-        basis::template interpFields<3, 3>(pt, fn, n0);
+        basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
+        basis::template interpFields<TacsScalar,3, 3>(pt, dd, d0d);
+        basis::template interpFields<TacsScalar,3, 3>(pt, fn, n0);
 
         if (field == TACS_SHELL_G23_COMPONENT) {
           // Compute g23 = e2^{T}*G*e3

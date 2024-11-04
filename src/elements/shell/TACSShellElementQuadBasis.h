@@ -31,24 +31,30 @@ inline void TacsLagrangeShapeFunction(const T u, const double knots[],
 
 template <typename T, int order>
 inline void TacsLagrangeShapeFuncDerivative(const T u,
-                                            const T knots[], T N[],
+                                            const double knots[], T N[],
                                             T Nd[]) {
   // Loop over the shape function knot locations
   for (int i = 0; i < order; i++) {
     N[i] = 1.0;
     Nd[i] = 0.0;
 
+    T knotsi = knots[i];
+
     // Loop over each point again, except for the current control
     // point, adding the contribution to the shape function
     for (int j = 0; j < order; j++) {
+      T knotsj = knots[j];
+
       if (i != j) {
-        T d = 1.0 / (knots[i] - knots[j]);
-        N[i] *= (u - knots[j]) * d;
+        T d = 1.0 / (knotsi - knotsj);
+        N[i] *= (u - knotsj) * d;
 
         // Now add up the contribution to the derivative
         for (int k = 0; k < order; k++) {
+          T knotsk = T(knotsk);
+
           if (k != i && k != j) {
-            d *= (u - knots[k]) / (knots[i] - knots[k]);
+            d *= (u - knotsk) / (knotsi - knotsk);
           }
         }
 
@@ -102,7 +108,7 @@ inline void TacsLagrangeLobattoShapeFuncDerivative(const T u, T *N,
     Nd[1] = -2.0 * u;
     Nd[2] = 0.5 + u;
   } else {
-    const T *knots = TacsGaussLobattoPoints4;
+    const double *knots = TacsGaussLobattoPoints4;
     if (order == 5) {
       knots = TacsGaussLobattoPoints5;
     } else if (order == 6) {
@@ -502,24 +508,23 @@ class TACSShellQuadBasis {
   /*
     Get the knots associated with the tying points
   */
-  template <typename T>
-  static inline void getTyingKnots(const T **ty_knots_order,
-                                   const T **ty_knots_reduced) {
+  static inline void getTyingKnots(const double **ty_knots_order,
+                                   const double **ty_knots_reduced) {
     if (order == 2) {
-      *ty_knots_order = T(TacsShellLinearTyingPoints);
-      *ty_knots_reduced = T(TacsGaussQuadPts1);
+      *ty_knots_order = TacsShellLinearTyingPoints;
+      *ty_knots_reduced = TacsGaussQuadPts1;
     } else if (order == 3) {
-      *ty_knots_order = T(TacsGaussQuadPts3);
-      *ty_knots_reduced = T(TacsGaussQuadPts2);
+      *ty_knots_order = TacsGaussQuadPts3;
+      *ty_knots_reduced = TacsGaussQuadPts2;
     } else if (order == 4) {
-      *ty_knots_order = T(TacsGaussQuadPts4);
-      *ty_knots_reduced = T(TacsGaussQuadPts4);
+      *ty_knots_order = TacsGaussQuadPts4;
+      *ty_knots_reduced = TacsGaussQuadPts4;
     } else if (order == 5) {
-      *ty_knots_order = T(TacsGaussQuadPts5);
-      *ty_knots_reduced = T(TacsGaussQuadPts4);
+      *ty_knots_order = TacsGaussQuadPts5;
+      *ty_knots_reduced = TacsGaussQuadPts4;
     } else {  // order == 6
-      *ty_knots_order = T(TacsGaussQuadPts6);
-      *ty_knots_reduced = T(TacsGaussQuadPts5);
+      *ty_knots_order = TacsGaussQuadPts6;
+      *ty_knots_reduced = TacsGaussQuadPts5;
     }
   }
 
@@ -531,8 +536,8 @@ class TACSShellQuadBasis {
   */
   template <typename T>
   static inline void getTyingPoint(int ty_index, T pt[]) {
-    const T *ty_knots_order, *ty_knots_reduced;
-    getTyingKnots<T>(&ty_knots_order, &ty_knots_reduced);
+    const double *ty_knots_order, *ty_knots_reduced;
+    getTyingKnots(&ty_knots_order, &ty_knots_reduced);
 
     int field = 0, ty = 0;
     if (ty_index < G11_OFFSET) {

@@ -372,7 +372,7 @@ TacsScalar TacsShellComputeDispGrad(const double pt[], const TacsScalar Xpts[],
                                     TacsScalar u0x[], TacsScalar u1x[]) {
   // Compute n,xi = [dn/dxi1; dn/dxi2]
   TacsScalar nxi[6];
-  basis::template interpFieldsGrad<3, 3>(pt, fn, nxi);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, fn, nxi);
 
   // Assemble the terms Xd = [Xxi; n] and Xdz
   TacsScalar Xd[9], Xdz[9];
@@ -407,12 +407,12 @@ TacsScalar TacsShellComputeDispGrad(const double pt[], const TacsScalar Xpts[],
   // Compute the director field and the gradient of the director
   // field at the specified point
   TacsScalar d0[3], d0xi[6];
-  basis::template interpFields<3, 3>(pt, d, d0);
-  basis::template interpFieldsGrad<3, 3>(pt, d, d0xi);
+  basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, d, d0xi);
 
   // Compute the gradient of the displacement solution at the quadrature points
   TacsScalar u0xi[6];
-  basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi);
+  basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, u0xi);
 
   // for (int i = 0; i < 3; i++) {
   //   printf("d0[%d] = %.8e\n", i, d0[i]);
@@ -471,7 +471,7 @@ TacsScalar TacsShellComputeDispGradDeriv(
     TacsScalar u0x[], TacsScalar u1x[], TacsScalar u0xd[], TacsScalar u1xd[]) {
   // Compute n,xi = [dn/dxi1; dn/dxi2]
   TacsScalar nxi[6];
-  basis::template interpFieldsGrad<3, 3>(pt, fn, nxi);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, fn, nxi);
 
   // Assemble the terms Xd = [Xxi; n] and Xdz
   TacsScalar Xd[9], Xdz[9];
@@ -498,15 +498,15 @@ TacsScalar TacsShellComputeDispGradDeriv(
   // Compute the director field and the gradient of the director
   // field at the specified point
   TacsScalar d0[3], d0xi[6], d0d[3], d0xid[6];
-  basis::template interpFields<3, 3>(pt, d, d0);
-  basis::template interpFieldsGrad<3, 3>(pt, d, d0xi);
-  basis::template interpFields<3, 3>(pt, dd, d0d);
-  basis::template interpFieldsGrad<3, 3>(pt, dd, d0xid);
+  basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, d, d0xi);
+  basis::template interpFields<TacsScalar,3, 3>(pt, dd, d0d);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, dd, d0xid);
 
   // Compute the gradient of the displacement solution at the quadrature points
   TacsScalar u0xi[6], u0xid[6];
-  basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi);
-  basis::template interpFieldsGrad<vars_per_node, 3>(pt, varsd, u0xid);
+  basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, u0xi);
+  basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, varsd, u0xid);
 
   // Compute the derivative u0,x
   TacsShellAssembleFrame(u0xi, d0, u0x);  // Use u0x to store [u0,xi; d0]
@@ -583,12 +583,12 @@ void TacsShellAddDispGradSens(const double pt[], const TacsScalar T[],
 
   // Compute the director field and the gradient of the director
   // field at the specified point
-  basis::template addInterpFieldsTranspose<3, 3>(pt, dd0, dd);
-  basis::template addInterpFieldsGradTranspose<3, 3>(pt, dd0xi, dd);
+  basis::template addInterpFieldsTranspose<TacsScalar,3, 3>(pt, dd0, dd);
+  basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, dd0xi, dd);
 
   // Compute the gradient of the displacement solution at the quadrature points
   if (res) {
-    basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, du0xi,
+    basis::template addInterpFieldsGradTranspose<TacsScalar,vars_per_node, 3>(pt, du0xi,
                                                                    res);
   }
 }
@@ -773,8 +773,8 @@ void TacsShellComputeDrillStrainDeriv(
 
     // Compute the field gradient at the node
     TacsScalar u0xi[6], u0xid[6];
-    basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi);
-    basis::template interpFieldsGrad<vars_per_node, 3>(pt, varsd, u0xid);
+    basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, u0xi);
+    basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, varsd, u0xid);
 
     // Compute the inverse transformation
     TacsScalar Xdinv[9];
@@ -927,7 +927,7 @@ void TacsShellAddDrillStrainHessian(
 
     // Compute the gradient of the displacement solution at the quadrature
     // points
-    basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, du0xi,
+    basis::template addInterpFieldsGradTranspose<TacsScalar,vars_per_node, 3>(pt, du0xi,
                                                                    t);
   }
 
@@ -1009,9 +1009,9 @@ void TacsShellAddTyingDispCouplingPostStack(const double pt[],
   for (int k = 0; k < 6; k++) {
     // Compute the director field and the gradient of the director
     // field at the specified point
-    basis::template addInterpFieldsTranspose<3, 3>(pt, &d2gtyd0[3 * k], &d2gtyd[dsize * k]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyd0xi[6 * k], &d2gtyd[dsize * k]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyu0xi[6 * k], &d2gtyu[usize * k]);
+    basis::template addInterpFieldsTranspose<TacsScalar,3, 3>(pt, &d2gtyd0[3 * k], &d2gtyd[dsize * k]);
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, &d2gtyd0xi[6 * k], &d2gtyd[dsize * k]);
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, &d2gtyu0xi[6 * k], &d2gtyu[usize * k]);
   }
 
   // Add the values into d2etyu and d2etyd
@@ -1113,10 +1113,10 @@ void TacsShellAddTyingDispCouplingA2D(const double pt[],
 
     // Compute the director field and the gradient of the director
     // field at the specified point
-    basis::template addInterpFieldsTranspose<3, 3>(pt, &d2gtyd0[3 * igty], &d2gtyd[dsize * igty]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyd0xi[6 * igty],
+    basis::template addInterpFieldsTranspose<TacsScalar,3, 3>(pt, &d2gtyd0[3 * igty], &d2gtyd[dsize * igty]);
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, &d2gtyd0xi[6 * igty],
                                                        &d2gtyd[dsize * igty]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, &d2gtyu0xi[6 * igty],
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, &d2gtyu0xi[6 * igty],
                                                        &d2gtyu[usize * igty]);
   }
 
@@ -1227,10 +1227,10 @@ void TacsShellAddTyingDispCoupling(const double pt[], const TacsScalar T[],
 
     // Compute the director field and the gradient of the director
     // field at the specified point
-    basis::template addInterpFieldsTranspose<3, 3>(pt, dd0, &d2gtyd[dsize * k]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, dd0xi,
+    basis::template addInterpFieldsTranspose<TacsScalar,3, 3>(pt, dd0, &d2gtyd[dsize * k]);
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, dd0xi,
                                                        &d2gtyd[dsize * k]);
-    basis::template addInterpFieldsGradTranspose<3, 3>(pt, du0xi,
+    basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, du0xi,
                                                        &d2gtyu[usize * k]);
   }
 
@@ -1289,8 +1289,8 @@ int TacsTestShellUtilities(double dh = 1e-7, int test_print_level = 2,
   TacsGenerateRandomArray(fn, xsize);
 
   TacsScalar n0[3], Xxi[6];
-  basis::template interpFields<3, 3>(pt, fn, n0);
-  basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
+  basis::template interpFields<TacsScalar,3, 3>(pt, fn, n0);
+  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, Xpts, Xxi);
 
   TacsScalar vars[size], d[dsize];
   TacsGenerateRandomArray(vars, size);

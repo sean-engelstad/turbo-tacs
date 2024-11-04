@@ -146,6 +146,7 @@ int main() {
     //auto t2 = std::chrono::high_resolution_clock::now();
     //TacsScalar dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count() / 1000.0;
     printf("Done with assemble Jacobian in %.8e sec\n", dt);
+    exit(0);
 
     // OPTIONAL test assembling the residuals
     // bool test_res = true; // doesn't use in solve but just to see if code works.

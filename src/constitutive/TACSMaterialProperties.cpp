@@ -312,6 +312,7 @@ void TACSMaterialProperties::evalTangentStiffness2D(T C[]) {
     C[5] = G12;
   }
 }
+template void TACSMaterialProperties::evalTangentStiffness2D<double>(double[]);
 
 void TACSMaterialProperties::evalTangentHeatFlux3D(TacsScalar C[]) {
   if (mat_type == TACS_ISOTROPIC_MATERIAL) {
@@ -359,7 +360,7 @@ void TACSMaterialProperties::evalStress2D(const TacsScalar e[],
     s[2] = G * e[2];
   } else {
     TacsScalar C[6];
-    evalTangentStiffness2D(C);
+    evalTangentStiffness2D<TacsScalar>(C);
     s[0] = C[0] * e[0] + C[1] * e[1] + C[2] * e[2];
     s[1] = C[1] * e[0] + C[3] * e[1] + C[4] * e[2];
     s[2] = C[2] * e[0] + C[4] * e[1] + C[5] * e[2];

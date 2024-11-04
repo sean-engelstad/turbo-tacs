@@ -21,12 +21,12 @@ class TACSLinearizedRotation {
     @param vars The full variable vector
     @param C The rotation matrices at each point
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeRotationMat(const TacsScalar vars[], TacsScalar C[]) {
-    const TacsScalar *q = &vars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeRotationMat(const T vars[], T C[]) {
+    const T *q = &vars[offset];
     for (int i = 0; i < num_nodes; i++) {
       // C = I - q^{x}
-      setMatSkew(-1.0, q, C);
+      setMatSkew<T>(T(-1.0), q, C);
       C[0] = C[4] = C[8] = 1.0;
 
       C += 9;

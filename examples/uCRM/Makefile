@@ -1,8 +1,11 @@
 include ../../Makefile.in
 include ../../A2D_SHELLS.mk
 
-LOCAL_OBJS = RunCRM.o RunCRM_orig.o
-LOCAL_EXECS = runcrm.x runcrm_orig.x
+# LOCAL_OBJS = RunCRM.o RunCRM_orig.o
+# LOCAL_EXECS = runcrm.x runcrm_orig.x
+
+LOCAL_OBJS = RunCRM.o
+LOCAL_EXECS = runcrm.x
 
 default: ${LOCAL_OBJS} ${LOCAL_EXECS}
 

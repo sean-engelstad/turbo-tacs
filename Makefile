@@ -56,7 +56,7 @@ complex_debug: TACS_IS_COMPLEX=true
 complex_debug: debug
 
 clean:
-	${RM} lib/libtacs.a lib/liba2dshells.s${SO_EXT}
+	${RM} lib/libtacs.a lib/liba2dshells.a lib/liba2dshells.${SO_EXT}
 	@for subdir in $(TACS_SUBDIRS) ; do \
 	  echo "making $@ in $$subdir"; \
 	  echo; \
