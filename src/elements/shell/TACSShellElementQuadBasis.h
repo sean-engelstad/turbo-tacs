@@ -14,25 +14,25 @@ enum TacsShellTyingStrainComponent {
   TACS_SHELL_G13_COMPONENT = 4
 };
 
-template <int order>
-inline void TacsLagrangeShapeFunction(const double u, const double knots[],
-                                      double N[]) {
+template <typename T, int order>
+inline void TacsLagrangeShapeFunction(const T u, const double knots[],
+                                      T N[]) {
   // Loop over the shape functions
   for (int i = 0; i < order; i++) {
     N[i] = 1.0;
     for (int j = 0; j < order; j++) {
       if (i != j) {
-        double d = 1.0 / (knots[i] - knots[j]);
-        N[i] *= (u - knots[j]) * d;
+        T d = T(1.0) / (T(knots[i]) - T(knots[j]));
+        N[i] *= (u - T(knots[j])) * d;
       }
     }
   }
 }
 
-template <int order>
-inline void TacsLagrangeShapeFuncDerivative(const double u,
-                                            const double knots[], double N[],
-                                            double Nd[]) {
+template <typename T, int order>
+inline void TacsLagrangeShapeFuncDerivative(const T u,
+                                            const T knots[], T N[],
+                                            T Nd[]) {
   // Loop over the shape function knot locations
   for (int i = 0; i < order; i++) {
     N[i] = 1.0;
@@ -42,7 +42,7 @@ inline void TacsLagrangeShapeFuncDerivative(const double u,
     // point, adding the contribution to the shape function
     for (int j = 0; j < order; j++) {
       if (i != j) {
-        double d = 1.0 / (knots[i] - knots[j]);
+        T d = 1.0 / (knots[i] - knots[j]);
         N[i] *= (u - knots[j]) * d;
 
         // Now add up the contribution to the derivative
@@ -59,8 +59,8 @@ inline void TacsLagrangeShapeFuncDerivative(const double u,
   }
 }
 
-template <int order>
-inline void TacsLagrangeLobattoShapeFunction(const double u, double *N) {
+template <typename T, int order>
+inline void TacsLagrangeLobattoShapeFunction(const T u, T *N) {
   if (order == 1) {
     N[0] = 1.0;
   } else if (order == 2) {
@@ -78,13 +78,13 @@ inline void TacsLagrangeLobattoShapeFunction(const double u, double *N) {
       knots = TacsGaussLobattoPoints6;
     }
 
-    TacsLagrangeShapeFunction<order>(u, knots, N);
+    TacsLagrangeShapeFunction<T,order>(u, knots, N);
   }
 }
 
-template <int order>
-inline void TacsLagrangeLobattoShapeFuncDerivative(const double u, double *N,
-                                                   double *Nd) {
+template <typename T, int order>
+inline void TacsLagrangeLobattoShapeFuncDerivative(const T u, T *N,
+                                                   T *Nd) {
   if (order == 1) {
     N[0] = 1.0;
   } else if (order == 2) {
@@ -102,14 +102,14 @@ inline void TacsLagrangeLobattoShapeFuncDerivative(const double u, double *N,
     Nd[1] = -2.0 * u;
     Nd[2] = 0.5 + u;
   } else {
-    const double *knots = TacsGaussLobattoPoints4;
+    const T *knots = TacsGaussLobattoPoints4;
     if (order == 5) {
       knots = TacsGaussLobattoPoints5;
     } else if (order == 6) {
       knots = TacsGaussLobattoPoints6;
     }
 
-    TacsLagrangeShapeFuncDerivative<order>(u, knots, N, Nd);
+    TacsLagrangeShapeFuncDerivative<T,order>(u, knots, N, Nd);
   }
 }
 
@@ -144,7 +144,8 @@ class TACSShellQuadBasis {
   /*
     Get the parametric points of each node in the element
   */
-  static void getNodePoint(const int n, double pt[]) {
+  template <typename T>
+  static void getNodePoint(const int n, T pt[]) {
     pt[0] = -1.0 + (2.0 / (order - 1)) * (n % order);
     pt[1] = -1.0 + (2.0 / (order - 1)) * (n / order);
   }
@@ -168,12 +169,12 @@ class TACSShellQuadBasis {
     return TACS_LAYOUT_NONE;
   }
 
-  template <int vars_per_node, int m>
-  static void interpFields(const double pt[], const TacsScalar values[],
-                           TacsScalar field[]) {
-    double na[order], nb[order];
-    TacsLagrangeLobattoShapeFunction<order>(pt[0], na);
-    TacsLagrangeLobattoShapeFunction<order>(pt[1], nb);
+  template <typename T, int vars_per_node, int m>
+  static void interpFields(const T pt[], const T values[],
+                           T field[]) {
+    T na[order], nb[order];
+    TacsLagrangeLobattoShapeFunction<T,order>(pt[0], na);
+    TacsLagrangeLobattoShapeFunction<T,order>(pt[1], nb);
 
     for (int k = 0; k < m; k++) {
       field[k] = 0.0;
@@ -189,13 +190,13 @@ class TACSShellQuadBasis {
     }
   }
 
-  template <int vars_per_node, int m>
-  static void addInterpFieldsTranspose(const double pt[],
-                                       const TacsScalar field[],
-                                       TacsScalar values[]) {
-    double na[order], nb[order];
-    TacsLagrangeLobattoShapeFunction<order>(pt[0], na);
-    TacsLagrangeLobattoShapeFunction<order>(pt[1], nb);
+  template <typename T, int vars_per_node, int m>
+  static void addInterpFieldsTranspose(const T pt[],
+                                       const T field[],
+                                       T values[]) {
+    T na[order], nb[order];
+    TacsLagrangeLobattoShapeFunction<T,order>(pt[0], na);
+    TacsLagrangeLobattoShapeFunction<T,order>(pt[1], nb);
 
     for (int j = 0; j < order; j++) {
       for (int i = 0; i < order; i++) {
@@ -207,13 +208,13 @@ class TACSShellQuadBasis {
     }
   }
 
-  template <int vars_per_node, int m>
-  static void interpFieldsGrad(const double pt[], const TacsScalar values[],
-                               TacsScalar grad[]) {
-    double na[order], dna[order];
-    double nb[order], dnb[order];
-    TacsLagrangeLobattoShapeFuncDerivative<order>(pt[0], na, dna);
-    TacsLagrangeLobattoShapeFuncDerivative<order>(pt[1], nb, dnb);
+  template <typename T, int vars_per_node, int m>
+  static void interpFieldsGrad(const T pt[], const T values[],
+                               T grad[]) {
+    T na[order], dna[order];
+    T nb[order], dnb[order];
+    TacsLagrangeLobattoShapeFuncDerivative<T,order>(pt[0], na, dna);
+    TacsLagrangeLobattoShapeFuncDerivative<T,order>(pt[1], nb, dnb);
 
     for (int k = 0; k < m; k++) {
       grad[2 * k] = 0.0;
@@ -231,13 +232,13 @@ class TACSShellQuadBasis {
     }
   }
 
-  template <int vars_per_node, int m>
-  static void addInterpFieldsGradTranspose(const double pt[], TacsScalar grad[],
-                                           TacsScalar values[]) {
-    double na[order], dna[order];
-    double nb[order], dnb[order];
-    TacsLagrangeLobattoShapeFuncDerivative<order>(pt[0], na, dna);
-    TacsLagrangeLobattoShapeFuncDerivative<order>(pt[1], nb, dnb);
+  template <typename T, int vars_per_node, int m>
+  static void addInterpFieldsGradTranspose(const T pt[], T grad[],
+                                           T values[]) {
+    T na[order], dna[order];
+    T nb[order], dnb[order];
+    TacsLagrangeLobattoShapeFuncDerivative<T,order>(pt[0], na, dna);
+    TacsLagrangeLobattoShapeFuncDerivative<T,order>(pt[1], nb, dnb);
 
     for (int j = 0; j < order; j++) {
       for (int i = 0; i < order; i++) {
@@ -501,23 +502,24 @@ class TACSShellQuadBasis {
   /*
     Get the knots associated with the tying points
   */
-  static inline void getTyingKnots(const double **ty_knots_order,
-                                   const double **ty_knots_reduced) {
+  template <typename T>
+  static inline void getTyingKnots(const T **ty_knots_order,
+                                   const T **ty_knots_reduced) {
     if (order == 2) {
-      *ty_knots_order = TacsShellLinearTyingPoints;
-      *ty_knots_reduced = TacsGaussQuadPts1;
+      *ty_knots_order = T(TacsShellLinearTyingPoints);
+      *ty_knots_reduced = T(TacsGaussQuadPts1);
     } else if (order == 3) {
-      *ty_knots_order = TacsGaussQuadPts3;
-      *ty_knots_reduced = TacsGaussQuadPts2;
+      *ty_knots_order = T(TacsGaussQuadPts3);
+      *ty_knots_reduced = T(TacsGaussQuadPts2);
     } else if (order == 4) {
-      *ty_knots_order = TacsGaussQuadPts4;
-      *ty_knots_reduced = TacsGaussQuadPts4;
+      *ty_knots_order = T(TacsGaussQuadPts4);
+      *ty_knots_reduced = T(TacsGaussQuadPts4);
     } else if (order == 5) {
-      *ty_knots_order = TacsGaussQuadPts5;
-      *ty_knots_reduced = TacsGaussQuadPts4;
+      *ty_knots_order = T(TacsGaussQuadPts5);
+      *ty_knots_reduced = T(TacsGaussQuadPts4);
     } else {  // order == 6
-      *ty_knots_order = TacsGaussQuadPts6;
-      *ty_knots_reduced = TacsGaussQuadPts5;
+      *ty_knots_order = T(TacsGaussQuadPts6);
+      *ty_knots_reduced = T(TacsGaussQuadPts5);
     }
   }
 
@@ -527,9 +529,10 @@ class TACSShellQuadBasis {
     @param index The index of the tying point
     @param pt The parametric point associated with the tying point
   */
-  static inline void getTyingPoint(int ty_index, double pt[]) {
-    const double *ty_knots_order, *ty_knots_reduced;
-    getTyingKnots(&ty_knots_order, &ty_knots_reduced);
+  template <typename T>
+  static inline void getTyingPoint(int ty_index, T pt[]) {
+    const T *ty_knots_order, *ty_knots_reduced;
+    getTyingKnots<T>(&ty_knots_order, &ty_knots_reduced);
 
     int field = 0, ty = 0;
     if (ty_index < G11_OFFSET) {
@@ -566,18 +569,19 @@ class TACSShellQuadBasis {
   /*
     Evaluate the interpolation for all of the tying points
   */
-  static void evalTyingInterp(const double pt[], double N[]) {
+ template <typename T>
+  static void evalTyingInterp(const T pt[], T N[]) {
     const double *ty_knots_order, *ty_knots_reduced;
     getTyingKnots(&ty_knots_order, &ty_knots_reduced);
 
     // Evaluate the required shape functions
-    double na[order], nb[order];
-    TacsLagrangeShapeFunction<order>(pt[0], ty_knots_order, na);
-    TacsLagrangeShapeFunction<order>(pt[1], ty_knots_order, nb);
+    T na[order], nb[order];
+    TacsLagrangeShapeFunction<T, order>(pt[0], ty_knots_order, na);
+    TacsLagrangeShapeFunction<T, order>(pt[1], ty_knots_order, nb);
 
-    double nar[order - 1], nbr[order - 1];
-    TacsLagrangeShapeFunction<order - 1>(pt[0], ty_knots_reduced, nar);
-    TacsLagrangeShapeFunction<order - 1>(pt[1], ty_knots_reduced, nbr);
+    T nar[order - 1], nbr[order - 1];
+    TacsLagrangeShapeFunction<T, order - 1>(pt[0], ty_knots_reduced, nar);
+    TacsLagrangeShapeFunction<T, order - 1>(pt[1], ty_knots_reduced, nbr);
 
     // TACS_SHELL_G11_COMPONENT
     for (int j = 0; j < order; j++) {
@@ -648,16 +652,17 @@ class TACSShellQuadBasis {
     @param ety The strain computed at the tying points
     @param gty The interpolated tying strain
   */
-  static inline void interpTyingStrain(const double pt[],
-                                       const TacsScalar ety[],
-                                       TacsScalar gty[]) {
+  template <typename T>
+  static inline void interpTyingStrain(const T pt[],
+                                       const T ety[],
+                                       T gty[]) {
     const int index[] = {0, 3, 1, 4, 2};
     const int num_tying_fields = 5;
 
-    double N[NUM_TYING_POINTS];
-    evalTyingInterp(pt, N);
+    T N[NUM_TYING_POINTS];
+    evalTyingInterp<T>(pt, N);
 
-    const double *N0 = N;
+    const T *N0 = N;
     for (int field = 0; field < num_tying_fields; field++) {
       const int npts = getNumTyingPoints(field);
 
@@ -678,16 +683,17 @@ class TACSShellQuadBasis {
     @param dgty The derivative of the interpolated strain
     @param dety The output derivative of the strain at the tying points
   */
-  static inline void addInterpTyingStrainTranspose(const double pt[],
-                                                   const TacsScalar dgty[],
-                                                   TacsScalar dety[]) {
+  template <typename T>
+  static inline void addInterpTyingStrainTranspose(const T pt[],
+                                                   const T dgty[],
+                                                   T dety[]) {
     const int index[] = {0, 3, 1, 4, 2};
     const int num_tying_fields = 5;
 
-    double N[NUM_TYING_POINTS];
-    evalTyingInterp(pt, N);
+    T N[NUM_TYING_POINTS];
+    evalTyingInterp<T>(pt, N);
 
-    const double *N0 = N;
+    const T *N0 = N;
     for (int field = 0; field < num_tying_fields; field++) {
       const int npts = getNumTyingPoints(field);
 

@@ -36,8 +36,9 @@
   output:
   out:  the resulting vector
 */
-static inline void crossProduct(const TacsScalar x[], const TacsScalar y[],
-                                TacsScalar out[]) {
+template <typename T>
+static inline void crossProduct(const T x[], const T y[],
+                                T out[]) {
   out[0] = (x[1] * y[2] - x[2] * y[1]);
   out[1] = (x[2] * y[0] - x[0] * y[2]);
   out[2] = (x[0] * y[1] - x[1] * y[0]);
@@ -105,8 +106,9 @@ static inline void crossProduct(const TacsScalar a, const TacsScalar x[],
   output:
   out:  the resulting vector
 */
-static inline void crossProductAdd(const TacsScalar a, const TacsScalar x[],
-                                   const TacsScalar y[], TacsScalar out[]) {
+template <typename T>
+static inline void crossProductAdd(const T a, const T x[],
+                                   const T y[], T out[]) {
   out[0] += a * (x[1] * y[2] - x[2] * y[1]);
   out[1] += a * (x[2] * y[0] - x[0] * y[2]);
   out[2] += a * (x[0] * y[1] - x[1] * y[0]);
@@ -119,7 +121,8 @@ static inline void crossProductAdd(const TacsScalar a, const TacsScalar x[],
   a:   the scalar
   x:   the vector
 */
-static inline void vec3Scale(const TacsScalar a, TacsScalar x[]) {
+template <typename T>
+static inline void vec3Scale(const T a, T x[]) {
   x[0] *= a;
   x[1] *= a;
   x[2] *= a;
@@ -136,7 +139,8 @@ static inline void vec3Scale(const TacsScalar a, TacsScalar x[]) {
 
   returns: the dot product
 */
-static inline TacsScalar vec3Dot(const TacsScalar x[], const TacsScalar y[]) {
+template <typename T>
+static inline T vec3Dot(const T x[], const T y[]) {
   return (x[0] * y[0] + x[1] * y[1] + x[2] * y[2]);
 }
 
@@ -243,8 +247,9 @@ static inline void vec3x3Outer(const TacsReal a[], const TacsReal b[],
   output:
   C:   the resulting matrix
 */
-static inline void vec3x3OuterAdd(const TacsScalar alpha, const TacsScalar a[],
-                                  const TacsScalar b[], TacsScalar C[]) {
+template <typename T>
+static inline void vec3x3OuterAdd(const T alpha, const T a[],
+                                  const T b[], T C[]) {
   C[0] += alpha * a[0] * b[0];
   C[1] += alpha * a[0] * b[1];
   C[2] += alpha * a[0] * b[2];
@@ -822,8 +827,9 @@ static inline void mat2x2SymmMultAdd(const TacsScalar A[], const TacsScalar x[],
   output:
   C:   the resulting matrix
 */
-static inline void mat3x3MatMult(const TacsScalar A[], const TacsScalar B[],
-                                 TacsScalar C[]) {
+template <typename T>
+static inline void mat3x3MatMult(const T A[], const T B[],
+                                 T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
   C[6] = A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
@@ -866,8 +872,9 @@ static inline void mat2x2MatMult(const TacsScalar A[], const TacsScalar B[],
   output:
   C:   the resulting matrix
 */
-static inline void mat3x3MatTransMult(const TacsScalar A[],
-                                      const TacsScalar B[], TacsScalar C[]) {
+template <typename T>
+static inline void mat3x3MatTransMult(const T A[],
+                                      const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
   C[6] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
@@ -910,8 +917,9 @@ static inline void mat2x2MatTransMult(const TacsScalar A[],
   output:
   C:   the resulting matrix
 */
-static inline void mat3x3TransMatMult(const TacsScalar A[],
-                                      const TacsScalar B[], TacsScalar C[]) {
+template <typename T>
+static inline void mat3x3TransMatMult(const T A[],
+                                      const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[3] * B[3] + A[6] * B[6];
   C[1] = A[0] * B[1] + A[3] * B[4] + A[6] * B[7];
   C[2] = A[0] * B[2] + A[3] * B[5] + A[6] * B[8];
@@ -1515,8 +1523,9 @@ static inline void matSymmMat3x4Mult(const TacsScalar A[], const TacsScalar B[],
   output:
   C:    the result is added to this matrix
 */
-static inline void setMatSkew(const TacsScalar a, const TacsScalar b[],
-                              TacsScalar C[]) {
+template <typename T>
+static inline void setMatSkew(const T a, const T b[],
+                              T C[]) {
   C[0] = 0.0;
   C[1] = -a * b[2];
   C[2] = a * b[1];
@@ -1977,11 +1986,12 @@ static inline void det3x32ndSens(const TacsScalar s, const TacsScalar A[],
 
   returns:    the determinant of A
 */
-static inline TacsScalar inv3x3(const TacsScalar A[], TacsScalar Ainv[]) {
-  TacsScalar det =
+template <typename T>
+static inline TacsScalar inv3x3(const T A[], T Ainv[]) {
+  T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
        A[6] * (A[1] * A[5] - A[2] * A[4]));
-  TacsScalar detinv = 1.0 / det;
+  T detinv = 1.0 / det;
 
   Ainv[0] = (A[4] * A[8] - A[5] * A[7]) * detinv;
   Ainv[1] = -(A[1] * A[8] - A[2] * A[7]) * detinv;

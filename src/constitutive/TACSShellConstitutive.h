@@ -49,8 +49,9 @@ class TACSShellConstitutive : public TACSConstitutive {
     @param X The point location
     @return The moments of the mass
   */
-  virtual void evalMassMoments(int elemIndex, const double pt[],
-                               const TacsScalar X[], TacsScalar moments[]) = 0;
+  template <typename T>
+  void evalMassMoments(int elemIndex, const T pt[],
+                               const T X[], T moments[]) {};
 
   /**
     Add the contribution of the mass moment sensitivities to the derivative of a

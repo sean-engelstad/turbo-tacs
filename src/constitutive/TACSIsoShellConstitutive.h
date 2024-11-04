@@ -57,8 +57,9 @@ class TACSIsoShellConstitutive : public TACSShellConstitutive {
                         const TacsScalar X[], int dvLen, TacsScalar dfdx[]);
 
   // Evaluate the mass moments
-  void evalMassMoments(int elemIndex, const double pt[], const TacsScalar X[],
-                       TacsScalar moments[]);
+  template <typename T>
+  void evalMassMoments(int elemIndex, const T pt[], const T X[],
+                       T moments[]);
 
   // Add the sensitivity of the mass moments
   void addMassMomentsDVSens(int elemIndex, const double pt[],
@@ -76,8 +77,9 @@ class TACSIsoShellConstitutive : public TACSShellConstitutive {
                   const TacsScalar strain[], TacsScalar stress[]);
                   
   // compute the ABD matrix
-  void getABDmatrix(int elemIndex, const double pt[],
-               const TacsScalar X[], TacsScalar ABD[]);
+  template <typename T>
+  void getABDmatrix(int elemIndex, const T pt[],
+               const T X[], T ABD[]);
 
   // Evaluate the tangent stiffness
   void evalTangentStiffness(int elemIndex, const double pt[],

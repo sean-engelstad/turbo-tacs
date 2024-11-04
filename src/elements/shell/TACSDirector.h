@@ -75,10 +75,10 @@ class TACSLinearizedRotation {
     @param dC The derivative w.r.t. the rotation matrix
     @param res The residual array
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void addRotationMatResidual(const TacsScalar vars[],
-                                     const TacsScalar dC[], TacsScalar res[]) {
-    TacsScalar *r = &res[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void addRotationMatResidual(const T vars[],
+                                     const T dC[], T res[]) {
+    T *r = &res[offset];
 
     for (int i = 0; i < num_nodes; i++) {
       r[0] += -(dC[7] - dC[5]);
@@ -183,8 +183,8 @@ class TACSLinearizedRotation {
   /**
     The linearized rotation class is unconstrained
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void addRotationConstraint(const TacsScalar vars[], TacsScalar res[]) {
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void addRotationConstraint(const T vars[], T res[]) {
   }
 
   template <int vars_per_node, int offset, int num_nodes>
@@ -206,16 +206,16 @@ class TACSLinearizedRotation {
     @param ddot The first time derivative of the director
     @param dddot The second time derivative of the director
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const TacsScalar vars[],
-                                   const TacsScalar dvars[],
-                                   const TacsScalar t[], TacsScalar d[],
-                                   TacsScalar ddot[]) {
-    const TacsScalar *q = &vars[offset];
-    const TacsScalar *qdot = &dvars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeDirectorRates(const T vars[],
+                                   const T dvars[],
+                                   const T t[], T d[],
+                                   T ddot[]) {
+    const T *q = &vars[offset];
+    const T *qdot = &dvars[offset];
     for (int i = 0; i < num_nodes; i++) {
-      crossProduct(q, t, d);
-      crossProduct(qdot, t, ddot);
+      crossProduct<T>(q, t, d);
+      crossProduct<T>(qdot, t, ddot);
 
       t += 3;
       d += 3;
@@ -241,19 +241,19 @@ class TACSLinearizedRotation {
     @param ddot The first time derivative of the director
     @param dddot The second time derivative of the director
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const TacsScalar vars[],
-                                   const TacsScalar dvars[],
-                                   const TacsScalar ddvars[],
-                                   const TacsScalar t[], TacsScalar d[],
-                                   TacsScalar ddot[], TacsScalar dddot[]) {
-    const TacsScalar *q = &vars[offset];
-    const TacsScalar *qdot = &dvars[offset];
-    const TacsScalar *qddot = &ddvars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeDirectorRates(const T vars[],
+                                   const T dvars[],
+                                   const T ddvars[],
+                                   const T t[], T d[],
+                                   T ddot[], T dddot[]) {
+    const T *q = &vars[offset];
+    const T *qdot = &dvars[offset];
+    const T *qddot = &ddvars[offset];
     for (int i = 0; i < num_nodes; i++) {
-      crossProduct(q, t, d);
-      crossProduct(qdot, t, ddot);
-      crossProduct(qddot, t, dddot);
+      crossProduct<T>(q, t, d);
+      crossProduct<T>(qdot, t, ddot);
+      crossProduct<T>(qddot, t, dddot);
 
       t += 3;
       d += 3;
@@ -345,16 +345,16 @@ class TACSLinearizedRotation {
     @param dd The contribution from the derivative of the director
     @param res The output residual
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void addDirectorResidual(const TacsScalar vars[],
-                                  const TacsScalar dvars[],
-                                  const TacsScalar ddvars[],
-                                  const TacsScalar t[], const TacsScalar dd[],
-                                  TacsScalar res[]) {
-    TacsScalar *r = &res[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void addDirectorResidual(const T vars[],
+                                  const T dvars[],
+                                  const T ddvars[],
+                                  const T t[], const T dd[],
+                                  T res[]) {
+    T *r = &res[offset];
 
     for (int i = 0; i < num_nodes; i++) {
-      crossProductAdd(1.0, t, dd, r);
+      crossProductAdd(T(1.0), t, dd, r);
 
       r += vars_per_node;
       dd += 3;
@@ -557,15 +557,17 @@ class TACSLinearizedRotation {
     }
   }
 
-  static TacsScalar evalDrillStrain(const TacsScalar u0x[],
-                                    const TacsScalar Ct[]) {
+  template <typename T>
+  static T evalDrillStrain(const T u0x[],
+                                    const T Ct[]) {
     // Compute the rotational penalty
-    return 0.5 * (Ct[3] + u0x[3] - Ct[1] - u0x[1]);
+    return T(0.5) * (Ct[3] + u0x[3] - Ct[1] - u0x[1]);
   }
 
-  static void evalDrillStrainSens(TacsScalar scale, const TacsScalar u0x[],
-                                  const TacsScalar Ct[], TacsScalar du0x[],
-                                  TacsScalar dCt[]) {
+  template <typename T>
+  static void evalDrillStrainSens(T scale, const T u0x[],
+                                  const T Ct[], T du0x[],
+                                  T dCt[]) {
     dCt[0] = 0.0;
     dCt[1] = -0.5 * scale;
     dCt[2] = 0.0;
@@ -626,14 +628,14 @@ class TACSQuadraticRotation {
     @param vars The full variable vector
     @param C The rotation matrices at each point
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeRotationMat(const TacsScalar vars[], TacsScalar C[]) {
-    const TacsScalar *q = &vars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeRotationMat(const T vars[], T C[]) {
+    const T *q = &vars[offset];
     for (int i = 0; i < num_nodes; i++) {
-      TacsScalar qTq = vec3Dot(q, q);
-      setMatSkew(-1.0, q, C);
-      C[0] = C[4] = C[8] = 1.0 - 0.5 * qTq;
-      vec3x3OuterAdd(0.5, q, q, C);
+      T qTq = vec3Dot<T>(q, q);
+      setMatSkew<T>(T(-1.0), q, C);
+      C[0] = C[4] = C[8] = T(1.0) - T(0.5) * qTq;
+      vec3x3OuterAdd<T>(T(0.5), q, q, C);
 
       C += 9;
       q += vars_per_node;
@@ -1426,8 +1428,9 @@ class TACSQuadraticRotation {
     }
   }
 
-  static TacsScalar evalDrillStrain(const TacsScalar u0x[],
-                                    const TacsScalar Ct[]) {
+  template <typename T>
+  static TacsScalar evalDrillStrain(const T u0x[],
+                                    const T Ct[]) {
     // Compute the rotational penalty
     return 0.5 * (Ct[3] + u0x[3] - Ct[1] - u0x[1]);
   }
@@ -1799,51 +1802,51 @@ class TACSQuaternionRotation {
     @param ddot The first time derivative of the director
     @param dddot The second time derivative of the director
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const TacsScalar vars[],
-                                   const TacsScalar dvars[],
-                                   const TacsScalar t[], TacsScalar d[],
-                                   TacsScalar ddot[]) {
-    const TacsScalar *q = &vars[offset];
-    const TacsScalar *qdot = &dvars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeDirectorRates(const T vars[],
+                                   const T dvars[],
+                                   const T t[], T d[],
+                                   T ddot[]) {
+    const T *q = &vars[offset];
+    const T *qdot = &dvars[offset];
 
     for (int i = 0; i < num_nodes; i++) {
-      TacsScalar Q[9];
-      Q[0] = -2.0 * (q[2] * q[2] + q[3] * q[3]);
-      Q[1] = 2.0 * (q[2] * q[1] - q[3] * q[0]);
-      Q[2] = 2.0 * (q[3] * q[1] + q[2] * q[0]);
+      T Q[9];
+      Q[0] = T(-2.0) * (q[2] * q[2] + q[3] * q[3]);
+      Q[1] = T(2.0) * (q[2] * q[1] - q[3] * q[0]);
+      Q[2] = T(2.0) * (q[3] * q[1] + q[2] * q[0]);
 
-      Q[3] = 2.0 * (q[1] * q[2] + q[3] * q[0]);
-      Q[4] = -2.0 * (q[1] * q[1] + q[3] * q[3]);
-      Q[5] = 2.0 * (q[3] * q[2] - q[1] * q[0]);
+      Q[3] = T(2.0) * (q[1] * q[2] + q[3] * q[0]);
+      Q[4] = T(-2.0) * (q[1] * q[1] + q[3] * q[3]);
+      Q[5] = T(2.0) * (q[3] * q[2] - q[1] * q[0]);
 
-      Q[6] = 2.0 * (q[1] * q[3] - q[2] * q[0]);
-      Q[7] = 2.0 * (q[2] * q[3] + q[1] * q[0]);
-      Q[8] = -2.0 * (q[1] * q[1] + q[2] * q[2]);
+      Q[6] = T(2.0) * (q[1] * q[3] - q[2] * q[0]);
+      Q[7] = T(2.0) * (q[2] * q[3] + q[1] * q[0]);
+      Q[8] = T(-2.0) * (q[1] * q[1] + q[2] * q[2]);
 
       // Compute d = Q*t
       d[0] = Q[0] * t[0] + Q[1] * t[1] + Q[2] * t[2];
       d[1] = Q[3] * t[0] + Q[4] * t[1] + Q[5] * t[2];
       d[2] = Q[6] * t[0] + Q[7] * t[1] + Q[8] * t[2];
 
-      TacsScalar Qdot[9];
-      Qdot[0] = -4.0 * (q[2] * qdot[2] + q[3] * qdot[3]);
-      Qdot[1] = 2.0 * (q[2] * qdot[1] - q[3] * qdot[0] + qdot[2] * q[1] -
+      T Qdot[9];
+      Qdot[0] = T(-4.0) * (q[2] * qdot[2] + q[3] * qdot[3]);
+      Qdot[1] = T(2.0) * (q[2] * qdot[1] - q[3] * qdot[0] + qdot[2] * q[1] -
                        qdot[3] * q[0]);
-      Qdot[2] = 2.0 * (q[3] * qdot[1] + q[2] * qdot[0] + qdot[3] * q[1] +
+      Qdot[2] = T(2.0) * (q[3] * qdot[1] + q[2] * qdot[0] + qdot[3] * q[1] +
                        qdot[2] * q[0]);
 
-      Qdot[3] = 2.0 * (q[1] * qdot[2] + q[3] * qdot[0] + qdot[1] * q[2] +
+      Qdot[3] = T(2.0) * (q[1] * qdot[2] + q[3] * qdot[0] + qdot[1] * q[2] +
                        qdot[3] * q[0]);
-      Qdot[4] = -4.0 * (q[1] * qdot[1] + q[3] * qdot[3]);
-      Qdot[5] = 2.0 * (q[3] * qdot[2] - q[1] * qdot[0] + qdot[3] * q[2] -
+      Qdot[4] = T(-4.0) * (q[1] * qdot[1] + q[3] * qdot[3]);
+      Qdot[5] = T(2.0) * (q[3] * qdot[2] - q[1] * qdot[0] + qdot[3] * q[2] -
                        qdot[1] * q[0]);
 
-      Qdot[6] = 2.0 * (q[1] * qdot[3] - q[2] * qdot[0] + qdot[1] * q[3] -
+      Qdot[6] = T(2.0) * (q[1] * qdot[3] - q[2] * qdot[0] + qdot[1] * q[3] -
                        qdot[2] * q[0]);
-      Qdot[7] = 2.0 * (q[2] * qdot[3] + q[1] * qdot[0] + qdot[2] * q[3] +
+      Qdot[7] = T(2.0) * (q[2] * qdot[3] + q[1] * qdot[0] + qdot[2] * q[3] +
                        qdot[1] * q[0]);
-      Qdot[8] = -4.0 * (q[1] * qdot[1] + q[2] * qdot[2]);
+      Qdot[8] = T(-4.0) * (q[1] * qdot[1] + q[2] * qdot[2]);
 
       // Compute d = Q*t
       ddot[0] = Qdot[0] * t[0] + Qdot[1] * t[1] + Qdot[2] * t[2];
@@ -1874,91 +1877,91 @@ class TACSQuaternionRotation {
     @param ddot The first time derivative of the director
     @param dddot The second time derivative of the director
   */
-  template <int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const TacsScalar vars[],
-                                   const TacsScalar dvars[],
-                                   const TacsScalar ddvars[],
-                                   const TacsScalar t[], TacsScalar d[],
-                                   TacsScalar ddot[], TacsScalar dddot[]) {
-    const TacsScalar *q = &vars[offset];
-    const TacsScalar *qdot = &dvars[offset];
-    const TacsScalar *qddot = &ddvars[offset];
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeDirectorRates(const T vars[],
+                                   const T dvars[],
+                                   const T ddvars[],
+                                   const T t[], T d[],
+                                   T ddot[], T dddot[]) {
+    const T *q = &vars[offset];
+    const T *qdot = &dvars[offset];
+    const T *qddot = &ddvars[offset];
 
     for (int i = 0; i < num_nodes; i++) {
-      TacsScalar Q[9];
-      Q[0] = -2.0 * (q[2] * q[2] + q[3] * q[3]);
-      Q[1] = 2.0 * (q[2] * q[1] - q[3] * q[0]);
-      Q[2] = 2.0 * (q[3] * q[1] + q[2] * q[0]);
+      T Q[9];
+      Q[0] = T(-2.0) * (q[2] * q[2] + q[3] * q[3]);
+      Q[1] = T(2.0) * (q[2] * q[1] - q[3] * q[0]);
+      Q[2] = T(2.0) * (q[3] * q[1] + q[2] * q[0]);
 
-      Q[3] = 2.0 * (q[1] * q[2] + q[3] * q[0]);
-      Q[4] = -2.0 * (q[1] * q[1] + q[3] * q[3]);
-      Q[5] = 2.0 * (q[3] * q[2] - q[1] * q[0]);
+      Q[3] = T(2.0) * (q[1] * q[2] + q[3] * q[0]);
+      Q[4] = T(-2.0) * (q[1] * q[1] + q[3] * q[3]);
+      Q[5] = T(2.0) * (q[3] * q[2] - q[1] * q[0]);
 
-      Q[6] = 2.0 * (q[1] * q[3] - q[2] * q[0]);
-      Q[7] = 2.0 * (q[2] * q[3] + q[1] * q[0]);
-      Q[8] = -2.0 * (q[1] * q[1] + q[2] * q[2]);
+      Q[6] = T(2.0) * (q[1] * q[3] - q[2] * q[0]);
+      Q[7] = T(2.0) * (q[2] * q[3] + q[1] * q[0]);
+      Q[8] = T(-2.0) * (q[1] * q[1] + q[2] * q[2]);
 
       // Compute d = Q*t
       d[0] = Q[0] * t[0] + Q[1] * t[1] + Q[2] * t[2];
       d[1] = Q[3] * t[0] + Q[4] * t[1] + Q[5] * t[2];
       d[2] = Q[6] * t[0] + Q[7] * t[1] + Q[8] * t[2];
 
-      TacsScalar Qdot[9];
-      Qdot[0] = -4.0 * (q[2] * qdot[2] + q[3] * qdot[3]);
-      Qdot[1] = 2.0 * (q[2] * qdot[1] - q[3] * qdot[0] + qdot[2] * q[1] -
+      T Qdot[9];
+      Qdot[0] = T(-4.0) * (q[2] * qdot[2] + q[3] * qdot[3]);
+      Qdot[1] = T(2.0) * (q[2] * qdot[1] - q[3] * qdot[0] + qdot[2] * q[1] -
                        qdot[3] * q[0]);
-      Qdot[2] = 2.0 * (q[3] * qdot[1] + q[2] * qdot[0] + qdot[3] * q[1] +
+      Qdot[2] = T(2.0) * (q[3] * qdot[1] + q[2] * qdot[0] + qdot[3] * q[1] +
                        qdot[2] * q[0]);
 
-      Qdot[3] = 2.0 * (q[1] * qdot[2] + q[3] * qdot[0] + qdot[1] * q[2] +
+      Qdot[3] = T(2.0) * (q[1] * qdot[2] + q[3] * qdot[0] + qdot[1] * q[2] +
                        qdot[3] * q[0]);
-      Qdot[4] = -4.0 * (q[1] * qdot[1] + q[3] * qdot[3]);
-      Qdot[5] = 2.0 * (q[3] * qdot[2] - q[1] * qdot[0] + qdot[3] * q[2] -
+      Qdot[4] = T(-4.0) * (q[1] * qdot[1] + q[3] * qdot[3]);
+      Qdot[5] = T(2.0) * (q[3] * qdot[2] - q[1] * qdot[0] + qdot[3] * q[2] -
                        qdot[1] * q[0]);
 
-      Qdot[6] = 2.0 * (q[1] * qdot[3] - q[2] * qdot[0] + qdot[1] * q[3] -
+      Qdot[6] = T(2.0) * (q[1] * qdot[3] - q[2] * qdot[0] + qdot[1] * q[3] -
                        qdot[2] * q[0]);
-      Qdot[7] = 2.0 * (q[2] * qdot[3] + q[1] * qdot[0] + qdot[2] * q[3] +
+      Qdot[7] = T(2.0) * (q[2] * qdot[3] + q[1] * qdot[0] + qdot[2] * q[3] +
                        qdot[1] * q[0]);
-      Qdot[8] = -4.0 * (q[1] * qdot[1] + q[2] * qdot[2]);
+      Qdot[8] = T(-4.0) * (q[1] * qdot[1] + q[2] * qdot[2]);
 
       // Compute ddot = Qdot*t
       ddot[0] = Qdot[0] * t[0] + Qdot[1] * t[1] + Qdot[2] * t[2];
       ddot[1] = Qdot[3] * t[0] + Qdot[4] * t[1] + Qdot[5] * t[2];
       ddot[2] = Qdot[6] * t[0] + Qdot[7] * t[1] + Qdot[8] * t[2];
 
-      TacsScalar Qddot[9];
-      Qddot[0] = -4.0 * (q[2] * qddot[2] + q[3] * qddot[3] + qdot[2] * qdot[2] +
+      T Qddot[9];
+      Qddot[0] = T(-4.0) * (q[2] * qddot[2] + q[3] * qddot[3] + qdot[2] * qdot[2] +
                          qdot[3] * qdot[3]);
       Qddot[1] =
-          2.0 * (q[2] * qddot[1] - q[3] * qddot[0] + qddot[2] * q[1] -
+          T(2.0) * (q[2] * qddot[1] - q[3] * qddot[0] + qddot[2] * q[1] -
                  qddot[3] * q[0] + qdot[2] * qdot[1] - qdot[3] * qdot[0] +
                  qdot[2] * qdot[1] - qdot[3] * qdot[0]);
       Qddot[2] =
-          2.0 * (q[3] * qddot[1] + q[2] * qddot[0] + qddot[3] * q[1] +
+          T(2.0) * (q[3] * qddot[1] + q[2] * qddot[0] + qddot[3] * q[1] +
                  qddot[2] * q[0] + qdot[3] * qdot[1] + qdot[2] * qdot[0] +
                  qdot[3] * qdot[1] + qdot[2] * qdot[0]);
 
       Qddot[3] =
-          2.0 * (q[1] * qddot[2] + q[3] * qddot[0] + qddot[1] * q[2] +
+          T(2.0) * (q[1] * qddot[2] + q[3] * qddot[0] + qddot[1] * q[2] +
                  qddot[3] * q[0] + qdot[1] * qdot[2] + qdot[3] * qdot[0] +
                  qdot[1] * qdot[2] + qdot[3] * qdot[0]);
-      Qddot[4] = -4.0 * (q[1] * qddot[1] + q[3] * qddot[3] + qdot[1] * qdot[1] +
+      Qddot[4] = T(-4.0) * (q[1] * qddot[1] + q[3] * qddot[3] + qdot[1] * qdot[1] +
                          qdot[3] * qdot[3]);
       Qddot[5] =
-          2.0 * (q[3] * qddot[2] - q[1] * qddot[0] + qddot[3] * q[2] -
+          T(2.0) * (q[3] * qddot[2] - q[1] * qddot[0] + qddot[3] * q[2] -
                  qddot[1] * q[0] + qdot[3] * qdot[2] - qdot[1] * qdot[0] +
                  qdot[3] * qdot[2] - qdot[1] * qdot[0]);
 
       Qddot[6] =
-          2.0 * (q[1] * qddot[3] - q[2] * qddot[0] + qddot[1] * q[3] -
+          T(2.0) * (q[1] * qddot[3] - q[2] * qddot[0] + qddot[1] * q[3] -
                  qddot[2] * q[0] + qdot[1] * qdot[3] - qdot[2] * qdot[0] +
                  qdot[1] * qdot[3] - qdot[2] * qdot[0]);
       Qddot[7] =
-          2.0 * (q[2] * qddot[3] + q[1] * qddot[0] + qddot[2] * q[3] +
+          T(2.0) * (q[2] * qddot[3] + q[1] * qddot[0] + qddot[2] * q[3] +
                  qddot[1] * q[0] + qdot[2] * qdot[3] + qdot[1] * qdot[0] +
                  qdot[2] * qdot[3] + qdot[1] * qdot[0]);
-      Qddot[8] = -4.0 * (q[1] * qddot[1] + q[2] * qddot[2] + qdot[1] * qdot[1] +
+      Qddot[8] = T(-4.0) * (q[1] * qddot[1] + q[2] * qddot[2] + qdot[1] * qdot[1] +
                          qdot[2] * qdot[2]);
 
       // Compute dddot = Qddot*t

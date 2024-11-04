@@ -5,8 +5,8 @@
 #include "TACSElementVerification.h"
 #include "TACSShellElementTransform.h"
 
-inline void TacsShellAssembleFrame(const TacsScalar Xxi[], const TacsScalar n[],
-                                   TacsScalar Xd[]) {
+template <typename T>
+inline void TacsShellAssembleFrame(const T Xxi[], const T n[], T Xd[]) {
   Xd[0] = Xxi[0];
   Xd[1] = Xxi[1];
   Xd[2] = n[0];
@@ -20,7 +20,8 @@ inline void TacsShellAssembleFrame(const TacsScalar Xxi[], const TacsScalar n[],
   Xd[8] = n[2];
 }
 
-inline void TacsShellAssembleFrame(const TacsScalar nxi[], TacsScalar Xdz[]) {
+template <typename T>
+inline void TacsShellAssembleFrame(const T nxi[], T Xdz[]) {
   Xdz[0] = nxi[0];
   Xdz[1] = nxi[1];
   Xdz[2] = 0.0;
@@ -34,8 +35,9 @@ inline void TacsShellAssembleFrame(const TacsScalar nxi[], TacsScalar Xdz[]) {
   Xdz[8] = 0.0;
 }
 
-inline void TacsShellAssembleFrame(const TacsScalar a[], const TacsScalar b[],
-                                   const TacsScalar c[], TacsScalar Xd[]) {
+template <typename T>
+inline void TacsShellAssembleFrame(const T a[], const T b[],
+                                   const T c[], T Xd[]) {
   if (a) {
     Xd[0] = a[0];
     Xd[3] = a[1];
@@ -67,8 +69,9 @@ inline void TacsShellAssembleFrame(const TacsScalar a[], const TacsScalar b[],
   }
 }
 
-inline void TacsShellExtractFrame(const TacsScalar Xd[], TacsScalar Xxi[],
-                                  TacsScalar n[]) {
+template <typename T>
+inline void TacsShellExtractFrame(const T Xd[], T Xxi[],
+                                  T n[]) {
   Xxi[0] = Xd[0];
   Xxi[1] = Xd[1];
   n[0] = Xd[2];
@@ -82,7 +85,8 @@ inline void TacsShellExtractFrame(const TacsScalar Xd[], TacsScalar Xxi[],
   n[2] = Xd[8];
 }
 
-inline void TacsShellExtractFrame(const TacsScalar Xd[], TacsScalar Xxi[]) {
+template <typename T>
+inline void TacsShellExtractFrame(const T Xd[], T Xxi[]) {
   Xxi[0] = Xd[0];
   Xxi[1] = Xd[1];
 
@@ -298,19 +302,19 @@ inline void mat3x3TransMatMatHessianAddSymm(
   @param Xdn The derivatives at the node
   @param fnorm Optional: the norm of the cross-product
 */
-template <class basis>
-void TacsShellComputeNodeNormals(const TacsScalar Xpts[], TacsScalar fn[],
-                                 TacsScalar Xdn[] = NULL,
-                                 TacsScalar fnorm[] = NULL) {
+template <typename T, class basis>
+void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
+                                 T Xdn[] = NULL,
+                                 T fnorm[] = NULL) {
   for (int i = 0; i < basis::NUM_NODES; i++) {
-    double pt[2];
-    basis::getNodePoint(i, pt);
+    T pt[2];
+    basis::template getNodePoint<T>(i, pt);
 
     // Compute the derivative X,xi at each node
-    TacsScalar Xxi[6];
-    basis::template interpFieldsGrad<3, 3>(pt, Xpts, Xxi);
+    T Xxi[6];
+    basis::template interpFieldsGrad<T,3, 3>(pt, Xpts, Xxi);
 
-    TacsScalar a[3], b[3];
+    T a[3], b[3];
     a[0] = Xxi[0];
     a[1] = Xxi[2];
     a[2] = Xxi[4];
@@ -320,10 +324,10 @@ void TacsShellComputeNodeNormals(const TacsScalar Xpts[], TacsScalar fn[],
     b[2] = Xxi[5];
 
     // Compute the normal direction at the point
-    crossProduct(a, b, &fn[3 * i]);
+    crossProduct<T>(a, b, &fn[3 * i]);
 
     // Compute the 2-norm of the vector in the normal direction
-    TacsScalar norm = sqrt(vec3Dot(&fn[3 * i], &fn[3 * i]));
+    T norm = sqrt(vec3Dot<T>(&fn[3 * i], &fn[3 * i]));
 
     // Save the 2-norm value if the fnorm argument is not NULL
     if (fnorm) {
@@ -332,11 +336,11 @@ void TacsShellComputeNodeNormals(const TacsScalar Xpts[], TacsScalar fn[],
 
     // Scale the normal direction
     if (norm != 0.0) {
-      vec3Scale(1.0 / norm, &fn[3 * i]);
+      vec3Scale<T>(1.0 / norm, &fn[3 * i]);
     }
 
     if (Xdn) {
-      TacsShellAssembleFrame(Xxi, &fn[3 * i], &Xdn[9 * i]);
+      TacsShellAssembleFrame<T>(Xxi, &fn[3 * i], &Xdn[9 * i]);
     }
   }
 }
@@ -691,49 +695,49 @@ void TacsShellAddDispGradHessian(const double pt[], const TacsScalar T[],
   @param Ctn The rotation matrix at each node
   @param etn The drill strain penalty value at each node
 */
-template <int vars_per_node, int offset, class basis, class director,
+template <typename T, int vars_per_node, int offset, class basis, class director,
           class model>
 void TacsShellComputeDrillStrain(TACSShellTransform *transform,
-                                 const TacsScalar Xdn[], const TacsScalar fn[],
-                                 const TacsScalar vars[], TacsScalar XdinvTn[],
-                                 TacsScalar Tn[], TacsScalar u0xn[],
-                                 TacsScalar Ctn[], TacsScalar etn[]) {
+                                 const T Xdn[], const T fn[],
+                                 const T vars[], T XdinvTn[],
+                                 T Tn[], T u0xn[],
+                                 T Ctn[], T etn[]) {
   for (int i = 0; i < basis::NUM_NODES; i++) {
-    double pt[2];
-    basis::getNodePoint(i, pt);
+    T pt[2];
+    basis::template getNodePoint<T>(i, pt);
 
     // Compute the transformation at the node
-    TacsScalar Xxi[6];
-    TacsShellExtractFrame(&Xdn[9 * i], Xxi);
-    transform->computeTransform(Xxi, &fn[3 * i], &Tn[9 * i]);
+    T Xxi[6];
+    TacsShellExtractFrame<T>(&Xdn[9 * i], Xxi);
+    transform->computeTransform<T>(Xxi, &fn[3 * i], &Tn[9 * i]);
 
     // Compute the field gradient at the node
-    TacsScalar u0xi[6];
-    basis::template interpFieldsGrad<vars_per_node, 3>(pt, vars, u0xi);
+    T u0xi[6];
+    basis::template interpFieldsGrad<T, vars_per_node, 3>(pt, vars, u0xi);
 
     // Compute the inverse transformation
-    TacsScalar Xdinv[9];
-    inv3x3(&Xdn[9 * i], Xdinv);
+    T Xdinv[9];
+    inv3x3<T>(&Xdn[9 * i], Xdinv);
 
     // Compute XdinvT = Xdinv*T
-    mat3x3MatMult(Xdinv, &Tn[9 * i], &XdinvTn[9 * i]);
-    TacsShellAssembleFrame(u0xi, &u0xn[9 * i]);  // Use u0x to store [u0,xi; 0]
+    mat3x3MatMult<T>(Xdinv, &Tn[9 * i], &XdinvTn[9 * i]);
+    TacsShellAssembleFrame<T>(u0xi, &u0xn[9 * i]);  // Use u0x to store [u0,xi; 0]
 
     // Compute the rotation matrix at this node
-    TacsScalar C[9], tmp[9];
-    director::template computeRotationMat<vars_per_node, offset, 1>(
+    T C[9], tmp[9];
+    director::template computeRotationMat<T, vars_per_node, offset, 1>(
         &vars[vars_per_node * i], C);
 
     // Compute Ct = T^{T}*C*T
     mat3x3TransMatMult(&Tn[9 * i], C, tmp);
-    mat3x3MatMult(tmp, &Tn[9 * i], &Ctn[9 * i]);
+    mat3x3MatMult<T>(tmp, &Tn[9 * i], &Ctn[9 * i]);
 
     // Compute the transformation u0x = T^{T}*ueta*Xdinv*T
     // u0x = T^{T}*u0d*Xdinv*T
-    mat3x3MatMult(&u0xn[9 * i], &XdinvTn[9 * i], tmp);
-    mat3x3TransMatMult(&Tn[9 * i], tmp, &u0xn[9 * i]);
+    mat3x3MatMult<T>(&u0xn[9 * i], &XdinvTn[9 * i], tmp);
+    mat3x3TransMatMult<T>(&Tn[9 * i], tmp, &u0xn[9 * i]);
 
-    etn[i] = director::evalDrillStrain(&u0xn[9 * i], &Ctn[9 * i]);
+    etn[i] = director::template evalDrillStrain<T>(&u0xn[9 * i], &Ctn[9 * i]);
   }
 }
 
@@ -822,42 +826,42 @@ void TacsShellComputeDrillStrainDeriv(
   @param detn The derivative of the drill strain penalty value at each node
   @param res The element residual
 */
-template <int vars_per_node, int offset, class basis, class director,
+template <typename T, int vars_per_node, int offset, class basis, class director,
           class model>
-void TacsShellAddDrillStrainSens(const TacsScalar Xdn[], const TacsScalar fn[],
-                                 const TacsScalar vars[],
-                                 const TacsScalar XdinvTn[],
-                                 const TacsScalar Tn[], const TacsScalar u0xn[],
-                                 const TacsScalar Ctn[],
-                                 const TacsScalar detn[], TacsScalar res[]) {
+void TacsShellAddDrillStrainSens(const T Xdn[], const T fn[],
+                                 const T vars[],
+                                 const T XdinvTn[],
+                                 const T Tn[], const T u0xn[],
+                                 const T Ctn[],
+                                 const T detn[], T res[]) {
   for (int i = 0; i < basis::NUM_NODES; i++) {
-    double pt[2];
-    basis::getNodePoint(i, pt);
+    T pt[2];
+    basis::template getNodePoint<T>(i, pt);
 
-    TacsScalar du0x[9], dCt[9];
-    director::evalDrillStrainSens(detn[i], &u0xn[9 * i], &Ctn[9 * i], du0x,
+    T du0x[9], dCt[9];
+    director::template evalDrillStrainSens<T>(detn[i], &u0xn[9 * i], &Ctn[9 * i], du0x,
                                   dCt);
 
     // Compute dCpt = T*dCt*T^{T}
-    TacsScalar dCpt[9], tmp[9];
-    mat3x3MatMult(&Tn[9 * i], dCt, tmp);
-    mat3x3MatTransMult(tmp, &Tn[9 * i], dCpt);
+    T dCpt[9], tmp[9];
+    mat3x3MatMult<T>(&Tn[9 * i], dCt, tmp);
+    mat3x3MatTransMult<T>(tmp, &Tn[9 * i], dCpt);
 
-    director::template addRotationMatResidual<vars_per_node, offset, 1>(
+    director::template addRotationMatResidual<T, vars_per_node, offset, 1>(
         &vars[i * vars_per_node], dCpt, &res[i * vars_per_node]);
 
     // Compute du0d = T*du0x*XdinvT^{T} + T*du1x*XdinvzT^{T}
-    TacsScalar du0d[9];
-    mat3x3MatTransMult(du0x, &XdinvTn[9 * i], tmp);
-    mat3x3MatMult(&Tn[9 * i], tmp, du0d);
+    T du0d[9];
+    mat3x3MatTransMult<T>(du0x, &XdinvTn[9 * i], tmp);
+    mat3x3MatMult<T>(&Tn[9 * i], tmp, du0d);
 
     // du0d = [du0xi; dd0]
-    TacsScalar du0xi[6];
-    TacsShellExtractFrame(du0d, du0xi);
+    T du0xi[6];
+    TacsShellExtractFrame<T>(du0d, du0xi);
 
     // Compute the gradient of the displacement solution at the quadrature
     // points
-    basis::template addInterpFieldsGradTranspose<vars_per_node, 3>(pt, du0xi,
+    basis::template addInterpFieldsGradTranspose<T, vars_per_node, 3>(pt, du0xi,
                                                                    res);
   }
 }

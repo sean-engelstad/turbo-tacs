@@ -14,40 +14,44 @@ class TACSShellTransform : public TACSObject {
     Given the local shell element reference frame Xf, compute the
     transformation from the global coordinates to the shell-aligned local axis.
   */
-  virtual void computeTransform(const TacsScalar Xxi[], const TacsScalar n0[],
-                                TacsScalar T[]) = 0;
+
+  // TODO : can't template on virtual functions? (was virtual before here)..
+  template <typename T>
+  void computeTransform(const T Xxi[], const T n0[],
+                                T Tmat[]) {}; // removed virtual here because
 };
 
 class TACSShellNaturalTransform : public TACSShellTransform {
  public:
   TACSShellNaturalTransform() {}
 
-  void computeTransform(const TacsScalar Xxi[], const TacsScalar n0[],
-                        TacsScalar T[]) {
-    TacsScalar n[3];
+  template <typename T>
+  void computeTransform(const T Xxi[], const T n0[],
+                        T Tmat[]) {
+    T n[3];
     n[0] = n0[0];
     n[1] = n0[1];
     n[2] = n0[2];
 
     // Scale by the normal
-    TacsScalar inv = 1.0 / sqrt(vec3Dot(n, n));
-    vec3Scale(inv, n);
+    T inv = 1.0 / sqrt(vec3Dot<T>(n, n));
+    vec3Scale<T>(inv, n);
 
-    TacsScalar t1[3];
+    T t1[3];
     t1[0] = Xxi[0];
     t1[1] = Xxi[2];
     t1[2] = Xxi[4];
 
-    TacsScalar d = vec3Dot(n, t1);
+    T d = vec3Dot<T>(n, t1);
     t1[0] = t1[0] - d * n[0];
     t1[0] = t1[0] - d * n[0];
     t1[0] = t1[0] - d * n[0];
 
-    inv = 1.0 / sqrt(vec3Dot(t1, t1));
-    vec3Scale(inv, t1);
+    inv = 1.0 / sqrt(vec3Dot<T>(t1, t1));
+    vec3Scale<T>(inv, t1);
 
-    TacsScalar t2[3];
-    crossProduct(n, t1, t2);
+    T t2[3];
+    crossProduct<T>(n, t1, t2);
 
     /*
 
@@ -78,17 +82,17 @@ class TACSShellNaturalTransform : public TACSShellTransform {
     */
 
     // Set the components of the transformation
-    T[0] = t1[0];
-    T[3] = t1[1];
-    T[6] = t1[2];
+    Tmat[0] = t1[0];
+    Tmat[3] = t1[1];
+    Tmat[6] = t1[2];
 
-    T[1] = t2[0];
-    T[4] = t2[1];
-    T[7] = t2[2];
+    Tmat[1] = t2[0];
+    Tmat[4] = t2[1];
+    Tmat[7] = t2[2];
 
-    T[2] = n[0];
-    T[5] = n[1];
-    T[8] = n[2];
+    Tmat[2] = n[0];
+    Tmat[5] = n[1];
+    Tmat[8] = n[2];
   }
 };
 
@@ -99,12 +103,12 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     axis[1] = _axis[1];
     axis[2] = _axis[2];
 
-    TacsScalar norm = sqrt(vec3Dot(axis, axis));
+    TacsScalar norm = sqrt(vec3Dot<TacsScalar>(axis, axis));
     TacsScalar invNorm = 0.0;
     if (norm != 0.0) {
       invNorm = 1.0 / norm;
     }
-    vec3Scale(invNorm, axis);
+    vec3Scale<TacsScalar>(invNorm, axis);
   }
 
   void getRefAxis(TacsScalar _axis[]) {
@@ -113,19 +117,20 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     _axis[2] = axis[2];
   }
 
-  void computeTransform(const TacsScalar Xxi[], const TacsScalar n0[],
-                        TacsScalar T[]) {
-    TacsScalar n[3];
+  template <typename T>
+  void computeTransform(const T Xxi[], const T n0[],
+                        T Tmat[]) {
+    T n[3];
     n[0] = n0[0];
     n[1] = n0[1];
     n[2] = n0[2];
 
     // Scale by the normal
-    TacsScalar inv = 1.0 / sqrt(vec3Dot(n, n));
+    T inv = 1.0 / sqrt(vec3Dot(n, n));
     vec3Scale(inv, n);
 
     // Compute the dot product with
-    TacsScalar an = vec3Dot(axis, n);
+    T an = vec3Dot(axis, n);
 
     // Check if ref axis is parallel with normal
     if (abs(TacsRealPart(an)) > 1.0 - SMALL_NUM) {
@@ -137,7 +142,7 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
 
     // Take the component of the reference axis perpendicular
     // to the surface
-    TacsScalar t1[3];
+    T t1[3];
     t1[0] = axis[0] - an * n[0];
     t1[1] = axis[1] - an * n[1];
     t1[2] = axis[2] - an * n[2];
@@ -147,7 +152,7 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     vec3Scale(inv, t1);
 
     // Take the cross product to determine the 2-direction
-    TacsScalar t2[3];
+    T t2[3];
     crossProduct(n, t1, t2);
 
     /*
@@ -199,17 +204,17 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     */
 
     // Set the components of the transformation
-    T[0] = t1[0];
-    T[3] = t1[1];
-    T[6] = t1[2];
+    Tmat[0] = t1[0];
+    Tmat[3] = t1[1];
+    Tmat[6] = t1[2];
 
-    T[1] = t2[0];
-    T[4] = t2[1];
-    T[7] = t2[2];
+    Tmat[1] = t2[0];
+    Tmat[4] = t2[1];
+    Tmat[7] = t2[2];
 
-    T[2] = n[0];
-    T[5] = n[1];
-    T[8] = n[2];
+    Tmat[2] = n[0];
+    Tmat[5] = n[1];
+    Tmat[8] = n[2];
   }
 
  private:

@@ -292,9 +292,10 @@ void TACSMaterialProperties::evalTangentStiffness3D(TacsScalar C[]) {
   }
 }
 
-void TACSMaterialProperties::evalTangentStiffness2D(TacsScalar C[]) {
+template <typename T>
+void TACSMaterialProperties::evalTangentStiffness2D(T C[]) {
   if (mat_type == TACS_ISOTROPIC_MATERIAL) {
-    TacsScalar D = E / (1.0 - nu * nu);
+    T D = E / (1.0 - nu * nu);
     C[0] = D;
     C[1] = nu * D;
     C[2] = 0.0;
@@ -302,7 +303,7 @@ void TACSMaterialProperties::evalTangentStiffness2D(TacsScalar C[]) {
     C[4] = 0.0;
     C[5] = G;
   } else {
-    TacsScalar nu21 = nu12 * E2 / E1;
+    T nu21 = nu12 * E2 / E1;
     C[0] = E1 / (1.0 - nu12 * nu21);
     C[1] = nu12 * E2 / (1.0 - nu12 * nu21);
     C[2] = 0.0;

@@ -86,7 +86,9 @@ class TACSMaterialProperties : public TACSObject {
 
   // Evaluate the constitutive relationships
   void evalTangentStiffness3D(TacsScalar C[]);
-  void evalTangentStiffness2D(TacsScalar C[]);
+
+  template <typename T>
+  void evalTangentStiffness2D(T C[]);
 
   // Evaluate the thermal conductivity matrices
   void evalTangentHeatFlux3D(TacsScalar Kc[]);

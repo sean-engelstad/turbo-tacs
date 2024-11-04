@@ -20,6 +20,7 @@
 
 #include "TACSElementVerification.h"
 #include "TacsUtilities.h"
+#include "adscalar.h"
 
 // Reordering implementation
 #include "AMDInterface.h"

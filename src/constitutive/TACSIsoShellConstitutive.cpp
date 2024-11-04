@@ -117,11 +117,12 @@ void TACSIsoShellConstitutive::addDensityDVSens(int elemIndex, TacsScalar scale,
 }
 
 // Evaluate the mass moments
-void TACSIsoShellConstitutive::evalMassMoments(int elemIndex, const double pt[],
-                                               const TacsScalar X[],
-                                               TacsScalar moments[]) {
+template <typename T>
+void TACSIsoShellConstitutive::evalMassMoments(int elemIndex, const T pt[],
+                                               const T X[],
+                                               T moments[]) {
   if (properties) {
-    TacsScalar rho = properties->getDensity();
+    T rho = properties->getDensity();
     moments[0] = rho * t;
     moments[1] = -rho * t * t * tOffset;
     moments[2] = rho * t * t * t * (tOffset * tOffset + 1.0 / 12.0);
@@ -158,7 +159,7 @@ void TACSIsoShellConstitutive::evalStress(int elemIndex, const double pt[],
     TacsScalar A[6], B[6], D[6], As[3], drill;
 
     // Compute the tangent stiffness matrix
-    properties->evalTangentStiffness2D(A);
+    properties->evalTangentStiffness2D<TacsScalar>(A);
 
     // The bending-stretch coupling matrix is zero in this case
     B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
@@ -198,15 +199,16 @@ int TACSIsoShellConstitutive::symind(int irow, int icol, int N) {
 };
 
 // Evaluate the stress
-void TACSIsoShellConstitutive::getABDmatrix(int elemIndex, const double pt[], const TacsScalar X[], TacsScalar ABD[]) {
+template <typename T>
+void TACSIsoShellConstitutive::getABDmatrix(int elemIndex, const T pt[], const T X[], T ABD[]) {
   // TacsScalar ABD[45]; // sym part of 9x9 ABD matrix
   if (properties) {
     
     // compute submatrices in the ABD
-    TacsScalar A[6], B[6], D[6], As[3], drill;
+    T A[6], B[6], D[6], As[3], drill;
 
     // Compute the tangent stiffness matrix
-    properties->evalTangentStiffness2D(A);
+    properties->evalTangentStiffness2D<T>(A);
 
     // The bending-stretch coupling matrix is zero in this case
     B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
@@ -222,7 +224,7 @@ void TACSIsoShellConstitutive::getABDmatrix(int elemIndex, const double pt[], co
     }
 
     // Set the through-thickness shear stiffness
-    As[0] = As[2] = (5.0 / 6.0) * A[5];
+    As[0] = As[2] = T(5.0 / 6.0) * A[5];
     As[1] = 0.0;
 
     drill = 0.5 * DRILLING_REGULARIZATION * (As[0] + As[2]);
@@ -279,8 +281,6 @@ void TACSIsoShellConstitutive::getABDmatrix(int elemIndex, const double pt[], co
     //   }
     // }
 
-  } else {
-    memset(ABD, 45 * sizeof(TacsScalar), 0.0);
   }
 }
 
@@ -296,7 +296,7 @@ void TACSIsoShellConstitutive::evalTangentStiffness(int elemIndex,
     TacsScalar *As = &C[18];
 
     // Compute the tangent stiffness matrix
-    properties->evalTangentStiffness2D(A);
+    properties->evalTangentStiffness2D<TacsScalar>(A);
 
     // The bending-stretch coupling matrix is zero in this case
     B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
@@ -331,7 +331,7 @@ void TACSIsoShellConstitutive::addStressDVSens(int elemIndex, TacsScalar scale,
   if (properties && tNum >= 0) {
     // Compute the tangent stiffness matrix
     TacsScalar A[6];
-    properties->evalTangentStiffness2D(A);
+    properties->evalTangentStiffness2D<TacsScalar>(A);
 
     TacsScalar dI = (3.0 * tOffset * tOffset + 0.25) * t * t;
 
@@ -365,7 +365,7 @@ TacsScalar TACSIsoShellConstitutive::evalFailure(int elemIndex,
     eb[2] = e[2] + hb * e[5];
 
     TacsScalar C[6];
-    properties->evalTangentStiffness2D(C);
+    properties->evalTangentStiffness2D<TacsScalar>(C);
 
     TacsScalar st[3], sb[3];
     mat3x3SymmMult(C, et, st);
@@ -416,7 +416,7 @@ TacsScalar TACSIsoShellConstitutive::evalFailureStrainSens(int elemIndex,
     eb[2] = e[2] + hb * e[5];
 
     TacsScalar C[6];
-    properties->evalTangentStiffness2D(C);
+    properties->evalTangentStiffness2D<TacsScalar>(C);
 
     TacsScalar st[3], sb[3];
     mat3x3SymmMult(C, et, st);
@@ -493,7 +493,7 @@ void TACSIsoShellConstitutive::addFailureDVSens(int elemIndex, TacsScalar scale,
     eb[2] = e[2] + hb * e[5];
 
     TacsScalar C[6];
-    properties->evalTangentStiffness2D(C);
+    properties->evalTangentStiffness2D<TacsScalar>(C);
 
     TacsScalar st[3], sb[3];
     mat3x3SymmMult(C, et, st);

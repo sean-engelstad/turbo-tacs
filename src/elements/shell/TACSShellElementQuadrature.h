@@ -19,11 +19,12 @@ class TACSQuadLinearQuadrature {
   static double getQuadratureWeight(int n) {
     return TacsGaussQuadWts2[n % 2] * TacsGaussQuadWts2[n / 2];
   }
-  static double getQuadraturePoint(int n, double pt[]) {
-    pt[0] = TacsGaussQuadPts2[n % 2];
-    pt[1] = TacsGaussQuadPts2[n / 2];
+  template <typename T>
+  static T getQuadraturePoint(int n, T pt[]) {
+    pt[0] = T(TacsGaussQuadPts2[n % 2]);
+    pt[1] = T(TacsGaussQuadPts2[n / 2]);
 
-    return TacsGaussQuadWts2[n % 2] * TacsGaussQuadWts2[n / 2];
+    return T(TacsGaussQuadWts2[n % 2]) * T(TacsGaussQuadWts2[n / 2]);
   }
   static int getNumElementFaces() { return 4; }
   static int getNumFaceQuadraturePoints(int face) { return 2; }
