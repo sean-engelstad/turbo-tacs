@@ -385,6 +385,21 @@ class TACSAssembler : public TACSObject {
   static void *assembleJacobian_thread(void *t);
   static void *assembleMatType_thread(void *t);
 
+  // GPU routines
+  #ifdef __CUDACC__
+
+  void assembleJacobian_launchGPU(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+                        TacsScalar *residual, TacsScalar *A,
+                        MatrixOrientation matOr = TACS_MAT_NORMAL,
+                        const TacsScalar lambda = 1.0);
+  
+  void assembleJacobian_GPU(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+                        TacsScalar *residual, TacsScalar *A,
+                        MatrixOrientation matOr = TACS_MAT_NORMAL,
+                        const TacsScalar lambda = 1.0);
+
+  #endif
+
   // Class to store specific information about the threaded
   // operations to perform. Note that assembly operations are
   // relatively easy, while design-variable dependent info is

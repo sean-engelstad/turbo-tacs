@@ -4086,101 +4086,121 @@ void TACSAssembler::assembleJacobian(TacsScalar alpha, TacsScalar beta,
                                      TacsScalar gamma, TACSBVec *residual,
                                      TACSMat *A, MatrixOrientation matOr,
                                      const TacsScalar lambda) {
-  // Zero the residual and the matrix
-  if (residual) {
-    residual->zeroEntries();
-  }
-  A->zeroEntries();
 
-  // Run the p-threaded version of the assembly code
-  if (thread_info->getNumThreads() > 1) {
-    // Set the number of completed elements to zero
-    numCompletedElements = 0;
-    tacsPInfo->assembler = this;
-    tacsPInfo->res = residual;
-    tacsPInfo->mat = A;
-    tacsPInfo->alpha = alpha;
-    tacsPInfo->beta = beta;
-    tacsPInfo->gamma = gamma;
-    tacsPInfo->lambda = lambda;
-    tacsPInfo->matOr = matOr;
+  #ifdef __CUDACC__
+    // GPU code
+    
+    // get serial versions of residual, matrix out of here on the host
+    TacsScalar *h_residual;
+    
+    // TODO: how to store this matrix object?
+    TacsScalar *h_matrix;
 
-    // Create the joinable attribute
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    // call assembleJacobian from GPU-only .cu file
+    // is this going to copy data to and from CPU and GPU - the residual and matrix?
+    // or can this be stored on the GPU?
+    assembleJacobian_GPU(alpha, beta, gamma, h_residual, h_matrix, matOr, lambda);
 
-    for (int k = 0; k < thread_info->getNumThreads(); k++) {
-      pthread_create(&threads[k], &attr, TACSAssembler::assembleJacobian_thread,
-                     (void *)tacsPInfo);
+  #else
+    // CPU code
+
+    // Zero the residual and the matrix
+    if (residual) {
+      residual->zeroEntries();
     }
+    A->zeroEntries();
 
-    // Join all the threads
-    for (int k = 0; k < thread_info->getNumThreads(); k++) {
-      pthread_join(threads[k], NULL);
-    }
+    // Run the p-threaded version of the assembly code
+    if (thread_info->getNumThreads() > 1) {
+      // Set the number of completed elements to zero
+      numCompletedElements = 0;
+      tacsPInfo->assembler = this;
+      tacsPInfo->res = residual;
+      tacsPInfo->mat = A;
+      tacsPInfo->alpha = alpha;
+      tacsPInfo->beta = beta;
+      tacsPInfo->gamma = gamma;
+      tacsPInfo->lambda = lambda;
+      tacsPInfo->matOr = matOr;
 
-    // Destroy the attribute
-    pthread_attr_destroy(&attr);
-  } else {
-    // Retrieve pointers to temporary storage
-    TacsScalar *vars, *dvars, *ddvars, *elemRes, *elemXpts;
-    TacsScalar *elemWeights, *elemMat;
-    getDataPointers(elementData, &vars, &dvars, &ddvars, &elemRes, &elemXpts,
-                    NULL, &elemWeights, &elemMat);
+      // Create the joinable attribute
+      pthread_attr_t attr;
+      pthread_attr_init(&attr);
+      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-    for (int i = 0; i < numElements; i++) {
-      int ptr = elementNodeIndex[i];
-      int len = elementNodeIndex[i + 1] - ptr;
-      const int *nodes = &elementTacsNodes[ptr];
-      xptVec->getValues(len, nodes, elemXpts);
-      varsVec->getValues(len, nodes, vars);
-      dvarsVec->getValues(len, nodes, dvars);
-      ddvarsVec->getValues(len, nodes, ddvars);
-
-      // Get the number of variables from the element
-      int nvars = elements[i]->getNumVariables();
-
-      // debug set vars to nonzero
-      // for (int i1 = 0; i1 < 24; i1++) {
-      //   vars[i1] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-      //   // printf("vars[%d] = %.8e\n", i1, vars[i1]);
-      // }
-
-      // Compute and add the contributions to the Jacobian
-      memset(elemRes, 0, nvars * sizeof(TacsScalar));
-      memset(elemMat, 0, nvars * nvars * sizeof(TacsScalar));
-      elements[i]->addJacobian(i, time, alpha, beta, gamma, elemXpts, vars,
-                               dvars, ddvars, elemRes, elemMat);
-
-      // end debug
-      // exit(0);
-
-      if (residual) {
-        residual->setValues(len, nodes, elemRes, TACS_ADD_VALUES);
+      for (int k = 0; k < thread_info->getNumThreads(); k++) {
+        pthread_create(&threads[k], &attr, TACSAssembler::assembleJacobian_thread,
+                      (void *)tacsPInfo);
       }
-      addMatValues(A, i, elemMat, elementIData, elemWeights, matOr);
+
+      // Join all the threads
+      for (int k = 0; k < thread_info->getNumThreads(); k++) {
+        pthread_join(threads[k], NULL);
+      }
+
+      // Destroy the attribute
+      pthread_attr_destroy(&attr);
+    } else {
+      // Retrieve pointers to temporary storage
+      TacsScalar *vars, *dvars, *ddvars, *elemRes, *elemXpts;
+      TacsScalar *elemWeights, *elemMat;
+      getDataPointers(elementData, &vars, &dvars, &ddvars, &elemRes, &elemXpts,
+                      NULL, &elemWeights, &elemMat);
+
+      for (int i = 0; i < numElements; i++) {
+        int ptr = elementNodeIndex[i];
+        int len = elementNodeIndex[i + 1] - ptr;
+        const int *nodes = &elementTacsNodes[ptr];
+        xptVec->getValues(len, nodes, elemXpts);
+        varsVec->getValues(len, nodes, vars);
+        dvarsVec->getValues(len, nodes, dvars);
+        ddvarsVec->getValues(len, nodes, ddvars);
+
+        // Get the number of variables from the element
+        int nvars = elements[i]->getNumVariables();
+
+        // debug set vars to nonzero
+        // for (int i1 = 0; i1 < 24; i1++) {
+        //   vars[i1] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        //   // printf("vars[%d] = %.8e\n", i1, vars[i1]);
+        // }
+
+        // Compute and add the contributions to the Jacobian
+        memset(elemRes, 0, nvars * sizeof(TacsScalar));
+        memset(elemMat, 0, nvars * nvars * sizeof(TacsScalar));
+        elements[i]->addJacobian(i, time, alpha, beta, gamma, elemXpts, vars,
+                                dvars, ddvars, elemRes, elemMat);
+
+        // end debug
+        // exit(0);
+
+        if (residual) {
+          residual->setValues(len, nodes, elemRes, TACS_ADD_VALUES);
+        }
+        addMatValues(A, i, elemMat, elementIData, elemWeights, matOr);
+      }
     }
-  }
 
-  // Do any matrix and residual assembly if required
-  A->beginAssembly();
-  if (residual) {
-    residual->beginSetValues(TACS_ADD_VALUES);
-  }
+    // Do any matrix and residual assembly if required
+    A->beginAssembly();
+    if (residual) {
+      residual->beginSetValues(TACS_ADD_VALUES);
+    }
 
-  A->endAssembly();
-  if (residual) {
-    residual->endSetValues(TACS_ADD_VALUES);
-  }
+    A->endAssembly();
+    if (residual) {
+      residual->endSetValues(TACS_ADD_VALUES);
+    }
 
-  // Apply the boundary conditions
-  if (residual) {
-    residual->applyBCs(bcMap, varsVec);
-  }
+    // Apply the boundary conditions
+    if (residual) {
+      residual->applyBCs(bcMap, varsVec);
+    }
 
-  // Apply the appropriate boundary conditions
-  A->applyBCs(bcMap);
+    // Apply the appropriate boundary conditions
+    A->applyBCs(bcMap);
+
+  #endif
 }
 
 /**

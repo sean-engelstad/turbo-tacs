@@ -596,6 +596,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
                                                            ety);
 
   // Loop over each quadrature point and add the residual contribution
+  // TODO : for GPU version, this for loop will be outside this call
   for (int quad_index = 0; quad_index < nquad; quad_index++) {
 
     // Get the quadrature weight
