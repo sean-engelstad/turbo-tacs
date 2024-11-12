@@ -1,4 +1,5 @@
 #pragma once
+#include "FakeShellElement_kernels.cuh"
 
 // kernels can't be included in a class, so in separate file
 

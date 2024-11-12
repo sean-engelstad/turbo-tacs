@@ -5,7 +5,7 @@ MY_INCLUDE = -Isrc/
 WITH_CUDA = true
 
 default:
-	g++ ${MY_INCLUDE} -c main.cpp -o main.o
+	g++ ${MY_INCLUDE} -c -g main.cpp -o main.o
 	g++ main.o -o run-cpu.exe
 	
 gpu:

@@ -1,6 +1,13 @@
 #pragma once
+
 #include "FakeShellElement.h"
 #include <random>
+
+#include <chrono>
+#include <cmath>
+#include <iostream>
+using namespace std;
+using namespace std::chrono;
 
 #ifdef __CUDACC__
 #include <assert.h>
@@ -90,20 +97,40 @@ public:
 
     void assembleJacobian(double *residual_, double **jacobian_) {
 
+        auto start = high_resolution_clock::now();
+
         #ifdef __CUDACC__
             assembleJacobian_GPU(residual, jacobian);
 
         #else 
+            printf("try assembleJacobian CPU\n");
             assembleJacobian_CPU(residual, jacobian);
 
         #endif
+
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        double sec = duration.count() * 1.0 / 1000000;
+        printf("duration %.8f seconds\n", sec);
 
     }
 
 private:
 
     void assembleJacobian_CPU(double *residual_, double **jacobian_) {
-        printf("assemble on the CPU\n");
+
+        // compute each kelem stiffness matrix
+        int ndof = 24;
+        printf("here\n");
+        // double kelems[num_elements][ndof*ndof];
+        printf("here2\n");
+
+        // copy device data onto shared data
+        for (int ielem = 0; ielem < num_elements; ielem++) {
+            double *elem_vars, *elem_mat;
+            // printf("ielem %d\n", ielem);
+            elements[ielem].getElementJacobian_CPU(num_elements, num_nodes, elem_vars, elem_mat);
+        }
     }
 
     #ifdef __CUDACC__
