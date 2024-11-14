@@ -11,6 +11,23 @@ RM = rm -f
 PYTHON = python
 PIP = pip
 
+# GPU compile
+GPU := true
+GPU_CXX := nvcc
+GPU_CC_FLAGS :=
+MPI_INC =
+MPI_LIB =
+
+ifeq ($(GPU), true)
+    # dynamically add MPI_INC and MPI_LIB from MPI compiler
+    # since NVIDIA CUDA compiler not linked to MPI
+    MPI_INC := -I$(shell ${CXX} -showme:incdirs)
+    MPI_LIB := -L$(shell ${CXX} -showme:libdirs)
+
+    CXX := $(GPU_CXX)
+    GPU_CC_FLAGS := -Xcompiler
+endif
+
 # declare A2D location for headers
 A2D_DIR = ${HOME}/git/a2d
 A2D_INCLUDE = -I${A2D_DIR}/include
@@ -31,6 +48,12 @@ EXTRA_CC_FLAGS = -fPIC -O3
 # Defines whether to use static or dynamic linking
 # TACS_LD_CMD=${TACS_DIR}/lib/liba2dshells.a
 TACS_LD_CMD=-L${TACS_DIR}/lib/ -Wl,-rpath,${TACS_DIR}/lib -la2dshells
+
+ifeq ($(GPU), true)
+    TACS_LD_CMD := -L${TACS_DIR}/lib/ -Xlinker -rpath -Xlinker ${TACS_DIR}/lib -la2dshells
+
+    CXX := $(GPU_CXX) -Xcompiler
+endif
 
 # For linux systems, use the following settings:
 SO_EXT=so

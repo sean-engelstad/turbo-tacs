@@ -4087,18 +4087,42 @@ void TACSAssembler::assembleJacobian(TacsScalar alpha, TacsScalar beta,
                                      const TacsScalar lambda) {
 
   #ifdef __CUDACC__
-    // GPU code
+    // GPU version of assembleJacobian
+
+    printf("assemble jacobian in GPU\n");
     
     // get serial versions of residual, matrix out of here on the host
-    TacsScalar *h_residual;
-    
-    // TODO: how to store this matrix object?
-    TacsScalar *h_matrix;
+    TacsScalar *h_residual, *h_matrix;
 
-    // call assembleJacobian from GPU-only .cu file
-    // is this going to copy data to and from CPU and GPU - the residual and matrix?
-    // or can this be stored on the GPU?
-    assembleJacobian_GPU(alpha, beta, gamma, h_residual, h_matrix, matOr, lambda);
+    // TODO : for each different type of element
+    // get the unique class / typedef with a new method getTacsElementType or something
+    // then we need to call the static __device__ addJacobian_kernel method with it
+    
+    using T = Quad4Shell;
+
+    // for each elemType (iterate over list of typedefs and list of the element objects) 
+    // , if different element types (for now assume all same type)
+
+    // TODO : make this more formal to compute optimal launch parameters for this element
+    // figure out how many threads and blocks to launch for this element
+
+    int elemPerBlock = 32; // TODO : figure out what the best number is here
+    dim3 block(24,4,elemPerBlock); // threads per block
+    dim3 grid((numElements + block.z-1) / block.z); // just 1D grid for now with remaining elements
+
+    // assume all device data such as xpts, vars, connectivity is already updated from design change, etc.
+    // launch a kernel after passing in the device data already on GPU
+    assembleJacobian_kernel<T> <<<grid, block>>>(
+      time, alpha, beta, gamma, 
+      d_elements,
+      d_vars, d_dvars, d_ddvars, 
+      d_elementNodeIndex, d_elementTacsNodes,
+      h_residual, h_matrix, matOr
+    );
+
+    cudaDeviceReset();
+
+    // send data back to BVec's ?
 
   #else
     // CPU code
@@ -4531,3 +4555,64 @@ void TACSAssembler::getAverageStresses(ElementType elem_type,
     avgStresses[j] /= numCompElems;
   }
 }
+
+// all GPU kernel code
+// -------------------------
+#ifdef __CUDACC__
+
+template <class ElemType>
+__global__ void assembleJacobian_kernel(
+    double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+    ElemType *d_elements, 
+    TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
+    int *d_elementNodeIndex, int *d_elementTacsNodes,
+    TacsScalar *residual, TacsScalar *A, MatrixOrientation matOr) {
+
+    // assumes that ElemType is the true element type here not TACSElement
+    // so no dynamic polymorphism problems (because GPUs don't do dynamic determination of methods)
+
+    // TODO : do we need launch params input as well?
+    // create shared memory for each block (some # of elements per block)
+    
+    // TODO : get these 
+    int elements_per_block = 1; // calculate from launch params
+    int vars_per_node = 6;
+    int nodes_per_elem = 4;
+    int dof_per_elem = vars_per_node * nodes_per_elem;
+    int nderivs = dof_per_elem;
+
+    __shared__ TacsScalar block_vars[elements_per_block][dof_per_elem];
+    __shared__ TacsScalar block_dvars[elements_per_block][dof_per_elem];
+    __shared__ TacsScalar block_ddvars[elements_per_block][dof_per_elem];
+    __shared__ TacsScalar block_Xpts[elements_per_block][3*nodes_per_elem];
+    __shared__ TacsScalar block_elemRes[elements_per_block][dof_per_elem];
+    __shared__ TacsScalar block_elemJac[elements_per_block][dof_per_elem * dof_per_elem];
+    __shared__ ElemType block_elements[elements_per_block];
+
+    // TODO : copy global data into the above shared memory 
+    
+
+    // loop over gauss points and derivative pass
+    int32_t local_element = threadIdx.z;
+    int32_t local_gauss = threadIdx.y;
+    int32_t loop_bound = blockDim.x * (nderivs + blockDim.x - 1) / blockDim.x; // effectively ceil function here on nderivs
+
+    for (int32_t ideriv = threadIdx.x; ideriv < loop_bound; ideriv += blockDim.x ) {
+        bool active_thread = local_element < elements_in_block && ideriv < nderivs; 
+
+        block_elements[local_element].addJacobian_kernel(
+            ideriv, local_gauss,
+            time, alpha, beta, gamma,
+            block_Xpts[local_element], block_vars[local_element], block_dvars[local_element], block_ddvars[local_element],
+            block_res[local_element], block_mat[local_element],
+        );
+    }
+
+    // now do assembly process and atomicAdds from elements in each block to global matrix assembly?
+
+    // TODO : now send shared memory back to global memory for element residual and jacobian?
+    // atomicAdd here back into global memory?
+
+}
+
+#endif // __CUDACC__

@@ -36,6 +36,13 @@ class TACSAssembler;
 #include "TACSSchurMat.h"
 #include "TACSSerialPivotMat.h"
 
+// GPU include
+#ifdef __CUDACC__
+
+#include "cuda_runtime.h"
+
+#endif // __CUDACC__
+
 /*
   TACSAssembler
 
@@ -388,15 +395,8 @@ class TACSAssembler : public TACSObject {
   // GPU routines
   #ifdef __CUDACC__
 
-  void assembleJacobian_launchGPU(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-                        TacsScalar *residual, TacsScalar *A,
-                        MatrixOrientation matOr = TACS_MAT_NORMAL,
-                        const TacsScalar lambda = 1.0);
-  
-  void assembleJacobian_GPU(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-                        TacsScalar *residual, TacsScalar *A,
-                        MatrixOrientation matOr = TACS_MAT_NORMAL,
-                        const TacsScalar lambda = 1.0);
+  // put TACS global FEM data on the GPU device (for serial currently)
+  void allocateDeviceData();
 
   #endif
 
@@ -520,5 +520,20 @@ inline void TACSAssembler::addMatValues(TACSMat *A, const int elemNum,
     A->addWeightValues(nnodes, varp, vars, weights, nvars, nvars, mat, matOr);
   }
 }
+
+// GPU kernels (outside class def)
+#ifdef __CUDACC__
+
+// __global__ kernel function
+template <class ElemType>
+__global__ void assembleJacobian_kernel(
+  double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+  ElemType *d_elements, 
+  TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
+  int *d_elementNodeIndex, int *d_elementTacsNodes,
+  TacsScalar *residual, TacsScalar *A, MatrixOrientation matOr
+);
+
+#endif
 
 #endif  // TACS_ASSEMBLER_H

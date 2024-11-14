@@ -766,6 +766,18 @@ class TACSElement : public TACSObject {
   virtual void setTemperature(TacsScalar _temp) {}
   virtual TacsScalar getTemperature() { return 0.0; }
 
+  #ifdef __CUDACC__
+  // GPU kernels
+  // doesn't support virtual kernel functions (can we do dynamic polymorphism)
+  __device__ void addJacobian_kernel(
+    int ideriv, int igauss,
+    double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+    const TacsScalar Xpts[], const TacsScalar vars[], const TacsScalar dvars[], const TacsScalar ddvars[],
+    TacsScalar res[], TacsScalar mat[]
+  ) {};
+
+  #endif // __CUDACC__
+
  private:
   int componentNum;
   // Defines order of finite differencing method
