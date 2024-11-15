@@ -899,6 +899,13 @@ TACSAssembler *TACSCreator::createTACS() {
   // Set the node locations
   tacs->setNodes(X);
   X->decref();
+  
+  // allocate data on device if GPU
+  #ifdef __CUDACC__
+
+    tacs->allocateDeviceData();
+
+  #endif
 
   // Free all the remaining memory
   delete[] local_elem_node_ptr;

@@ -267,6 +267,14 @@ class TACSAssembler : public TACSObject {
   void computeLocalNodeToNodeCSR(int **_rowp, int **_cols, int nodiag = 0);
   void computeNodeToElementCSR(int **_nodeElem, int **_nodeElemIndex);
 
+  // public GPU routines
+  #ifdef __CUDACC__
+
+    // put TACS global FEM data on the GPU device (for serial currently)
+    void allocateDeviceData();
+
+  #endif // __CUDACC__
+
  private:
   // Get the number of design variable numbers
   // -----------------------------------------
@@ -392,11 +400,14 @@ class TACSAssembler : public TACSObject {
   static void *assembleJacobian_thread(void *t);
   static void *assembleMatType_thread(void *t);
 
-  // GPU routines
+  // GPU data
   #ifdef __CUDACC__
 
-  // put TACS global FEM data on the GPU device (for serial currently)
-  void allocateDeviceData();
+    // GPU storage data on device (private)
+    TACSElement **d_elements;
+    TacsScalar *d_varsVec, *d_dvarsVec, *d_ddvarsVec;
+    TacsScalar *d_xptVec;
+    int *d_elementNodeIndex, *d_elementTacsNodes;
 
   #endif
 
@@ -525,12 +536,11 @@ inline void TACSAssembler::addMatValues(TACSMat *A, const int elemNum,
 #ifdef __CUDACC__
 
 // __global__ kernel function
-template <class ElemType>
+template <int elemPerBlock>
 __global__ void assembleJacobian_kernel(
   double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-  ElemType *d_elements, 
-  TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
-  int *d_elementNodeIndex, int *d_elementTacsNodes,
+  TacsScalar *d_xpts, TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
+  int numElements, TACSElement **d_elements, int *d_elementNodeIndex, int *d_elementTacsNodes,
   TacsScalar *residual, TacsScalar *A, MatrixOrientation matOr
 );
 

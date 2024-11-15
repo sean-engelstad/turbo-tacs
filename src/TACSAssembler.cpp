@@ -910,11 +910,23 @@ TACSBVec *TACSAssembler::createNodeVec() {
   @param X The nodal coordinate vector
 */
 void TACSAssembler::setNodes(TACSBVec *X) {
+
   xptVec->copyValues(X);
 
   // Distribute the values at this point
   xptVec->beginDistributeValues();
   xptVec->endDistributeValues();
+
+  #ifdef __CUDACC__
+
+    TacsScalar *h_xptVec;
+    xptVec->getArray(&h_xptVec);
+
+    // copy to device
+    size_t nnodesBytes = 3 * numNodes * sizeof(TacsScalar);
+    cudaMemcpy(d_xptVec, h_xptVec, nnodesBytes, cudaMemcpyHostToDevice);
+
+  #endif
 }
 
 /**
@@ -3824,36 +3836,56 @@ void TACSAssembler::zeroDDotVariables() { ddvarsVec->zeroEntries(); }
 */
 void TACSAssembler::setVariables(TACSBVec *vars, TACSBVec *dvars,
                                  TACSBVec *ddvars) {
-  // Copy the values to the array.
-  if (vars) {
-    varsVec->copyValues(vars);
-  }
-  if (dvars) {
-    dvarsVec->copyValues(dvars);
-  }
-  if (ddvars) {
-    ddvarsVec->copyValues(ddvars);
-  }
 
-  // Distribute the values and evaluate the dependent nodes.
-  if (vars) {
-    varsVec->beginDistributeValues();
-  }
-  if (dvars) {
-    dvarsVec->beginDistributeValues();
-  }
-  if (ddvars) {
-    ddvarsVec->beginDistributeValues();
-  }
-  if (vars) {
-    varsVec->endDistributeValues();
-  }
-  if (dvars) {
-    dvarsVec->endDistributeValues();
-  }
-  if (ddvars) {
-    ddvarsVec->endDistributeValues();
-  }
+  #ifdef __CUDACC__
+
+    // get host data out of MPI objects, assume only one processor here
+    // otherwise need like a gather step or something onto root proc then broadcast? 
+    TacsScalar *h_varsVec, *h_dvarsVec, *h_ddvarsVec;
+    vars->getArray(&h_varsVec);
+    dvars->getArray(&h_dvarsVec);
+    ddvars->getArray(&h_ddvarsVec);
+
+    // now cudaMemcpy host to device (assuming device data already allocated)
+    size_t nvars = varsPerNode * numNodes * sizeof(TacsScalar);
+    cudaMemcpy(d_varsVec, h_varsVec, nvars, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dvarsVec, h_dvarsVec, nvars, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_ddvarsVec, h_ddvarsVec, nvars, cudaMemcpyHostToDevice);
+
+  #else // not __CUDACC__
+
+    // Copy the values to the array.
+    if (vars) {
+      varsVec->copyValues(vars);
+    }
+    if (dvars) {
+      dvarsVec->copyValues(dvars);
+    }
+    if (ddvars) {
+      ddvarsVec->copyValues(ddvars);
+    }
+
+    // Distribute the values and evaluate the dependent nodes.
+    if (vars) {
+      varsVec->beginDistributeValues();
+    }
+    if (dvars) {
+      dvarsVec->beginDistributeValues();
+    }
+    if (ddvars) {
+      ddvarsVec->beginDistributeValues();
+    }
+    if (vars) {
+      varsVec->endDistributeValues();
+    }
+    if (dvars) {
+      dvarsVec->endDistributeValues();
+    }
+    if (ddvars) {
+      ddvarsVec->endDistributeValues();
+    }
+
+  #endif // __CUDACC__
 }
 
 /**
@@ -4097,8 +4129,7 @@ void TACSAssembler::assembleJacobian(TacsScalar alpha, TacsScalar beta,
     // TODO : for each different type of element
     // get the unique class / typedef with a new method getTacsElementType or something
     // then we need to call the static __device__ addJacobian_kernel method with it
-    
-    using T = Quad4Shell;
+    // using T = Quad4Shell; // not doing this for now
 
     // for each elemType (iterate over list of typedefs and list of the element objects) 
     // , if different element types (for now assume all same type)
@@ -4106,17 +4137,17 @@ void TACSAssembler::assembleJacobian(TacsScalar alpha, TacsScalar beta,
     // TODO : make this more formal to compute optimal launch parameters for this element
     // figure out how many threads and blocks to launch for this element
 
-    int elemPerBlock = 32; // TODO : figure out what the best number is here
+    const int elemPerBlock = 32; // TODO : figure out what the best number is here
     dim3 block(24,4,elemPerBlock); // threads per block
     dim3 grid((numElements + block.z-1) / block.z); // just 1D grid for now with remaining elements
 
     // assume all device data such as xpts, vars, connectivity is already updated from design change, etc.
     // launch a kernel after passing in the device data already on GPU
-    assembleJacobian_kernel<T> <<<grid, block>>>(
+    // TODO : should this be templated by launch params instead?
+    assembleJacobian_kernel<elemPerBlock> <<<grid, block>>>(
       time, alpha, beta, gamma, 
-      d_elements,
-      d_vars, d_dvars, d_ddvars, 
-      d_elementNodeIndex, d_elementTacsNodes,
+      d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
+      numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
       h_residual, h_matrix, matOr
     );
 
@@ -4560,12 +4591,50 @@ void TACSAssembler::getAverageStresses(ElementType elem_type,
 // -------------------------
 #ifdef __CUDACC__
 
-template <class ElemType>
+void TACSAssembler::allocateDeviceData() {
+  
+  // now do allocate and copy from host to device for variables
+  size_t nvars = varsPerNode * numNodes * sizeof(TacsScalar);
+  cudaMalloc((TacsScalar**)&d_varsVec, nvars);
+  cudaMemset(d_varsVec, 0.0, nvars);
+
+  cudaMalloc((TacsScalar**)&d_dvarsVec, nvars);
+  cudaMemset(d_dvarsVec, 0.0, nvars);
+
+  cudaMalloc((TacsScalar**)&d_ddvarsVec, nvars);
+  cudaMemset(d_ddvarsVec, 0.0, nvars);
+
+  // now allocate and copy host to device for mesh
+
+  size_t nxptsBytes = 3 * numNodes * sizeof(TacsScalar);
+  cudaMalloc((TacsScalar**)&d_xptVec, nxptsBytes);
+  cudaMemset(d_xptVec, 0.0, nxptsBytes);
+  setNodes(xptVec);
+
+  // is polymorphism a problem here? will TACSShellElement have different size?
+  size_t nelemsBytes = numElements * sizeof(TACSElement);
+  cudaMalloc((TACSElement**)&d_elements, nelemsBytes);
+  cudaMemcpy(d_elements, elements, nelemsBytes, cudaMemcpyHostToDevice);
+
+  size_t nnodesBytes = (numElements + 1) * sizeof(int);
+  cudaMalloc((int**)&d_elementNodeIndex, nnodesBytes);
+  cudaMemcpy(d_elementNodeIndex, elementNodeIndex, nnodesBytes, cudaMemcpyHostToDevice);
+  
+  int size = elementNodeIndex[numElements];
+  size_t connBytes = size * sizeof(int);
+  cudaMalloc((int**)&d_elementTacsNodes, connBytes);
+  cudaMemcpy(d_elementTacsNodes, elementTacsNodes, connBytes, cudaMemcpyHostToDevice);
+
+}
+
+// maybe this should be templated here.. maybe not
+// what should be templates (the launch params?)
+// template <class ElemType>
+template <int elemPerBlock>
 __global__ void assembleJacobian_kernel(
     double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-    ElemType *d_elements, 
-    TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
-    int *d_elementNodeIndex, int *d_elementTacsNodes,
+    TacsScalar *d_xpts, TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
+    int numElements, TACSElement **d_elements, int *d_elementNodeIndex, int *d_elementTacsNodes,
     TacsScalar *residual, TacsScalar *A, MatrixOrientation matOr) {
 
     // assumes that ElemType is the true element type here not TACSElement
@@ -4574,23 +4643,73 @@ __global__ void assembleJacobian_kernel(
     // TODO : do we need launch params input as well?
     // create shared memory for each block (some # of elements per block)
     
-    // TODO : get these 
-    int elements_per_block = 1; // calculate from launch params
-    int vars_per_node = 6;
-    int nodes_per_elem = 4;
-    int dof_per_elem = vars_per_node * nodes_per_elem;
-    int nderivs = dof_per_elem;
+    // TODO : get these from the element class on this kernel
+    const int vars_per_node = 6;
+    const int nodes_per_elem = 4;
+    const int dof_per_elem = vars_per_node * nodes_per_elem; // = 24 here
+    const int nderivs = dof_per_elem;
 
-    __shared__ TacsScalar block_vars[elements_per_block][dof_per_elem];
-    __shared__ TacsScalar block_dvars[elements_per_block][dof_per_elem];
-    __shared__ TacsScalar block_ddvars[elements_per_block][dof_per_elem];
-    __shared__ TacsScalar block_Xpts[elements_per_block][3*nodes_per_elem];
-    __shared__ TacsScalar block_elemRes[elements_per_block][dof_per_elem];
-    __shared__ TacsScalar block_elemJac[elements_per_block][dof_per_elem * dof_per_elem];
-    __shared__ ElemType block_elements[elements_per_block];
+    __shared__ TacsScalar block_vars[elemPerBlock][dof_per_elem];
+    __shared__ TacsScalar block_dvars[elemPerBlock][dof_per_elem];
+    __shared__ TacsScalar block_ddvars[elemPerBlock][dof_per_elem];
+    __shared__ TacsScalar block_Xpts[elemPerBlock][3*nodes_per_elem];
+    __shared__ TacsScalar block_res[elemPerBlock][dof_per_elem];
+    __shared__ TacsScalar block_mat[elemPerBlock][dof_per_elem * dof_per_elem];
+    __shared__ TACSElement *block_elements;
 
-    // TODO : copy global data into the above shared memory 
+    // TODO : copy global data into the above shared memory
+    // want to ensure that shared data copy is distributed among blocks / threads
+    // TODO : generalize this part if # elements exceeds grid size? 
     
+    // distribute the copy among some # of threads
+    // https://forums.developer.nvidia.com/t/copying-data-from-global-memory-to-shared-memory-by-each-thread/9498/5
+    int ithread = threadIdx.z * blockDim.x * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x;
+    int ielem = ithread; // shared memory ielem
+    // global memory ielem value
+    int global_ielem = blockDim.x * blockIdx.x + ielem;
+    if (ithread < elemPerBlock && global_ielem < numElements) {
+      // copy one element's data over from global to shared memory (no for loop!)
+      // int elemOffset = elementsPerBlock * blockIdx.z;
+      
+      int ptr = d_elementNodeIndex[global_ielem];   // says the starting node for this elem
+      int len = d_elementNodeIndex[global_ielem+1] - ptr; // just says how many nodes are on this element I believe (bunch of integers)
+      const int *nodes = &d_elementTacsNodes[ptr];
+
+      // loop over each of the nodes in the element
+      for (int inode = 0; inode < len; inode++) {
+        int global_node = nodes[inode];
+        // here we do the main data copying.. (do a deep copy or less than that..)
+        // I guess do a deep copy for now
+        for (int ivar = 0; ivar < vars_per_node; ivar++) {
+          int idof = vars_per_node*inode + ivar;
+          int global_idof = vars_per_node * global_node + ivar;
+          // any potential speedup here?
+          block_vars[ielem][idof] = d_vars[global_idof];
+          block_dvars[ielem][idof] = d_dvars[global_idof];
+          block_ddvars[ielem][idof] = d_ddvars[global_idof];
+        } // end of ivar for loop
+
+        // TODO : use spatial_dim arg here
+        for (int idim = 0; idim < 3; idim++) {
+          int ixpt = 3 * inode + idim; 
+          int global_ixpt = 3 * inode + idim;
+          block_Xpts[ielem][ixpt] = d_xpts[global_ixpt];
+        }
+
+      } // end of inode for loop
+
+      // copy element object to shared memory
+      block_elements[ielem] = *d_elements[global_ielem];
+
+      // zero out res, mat
+      // cudaMemset(&block_res[ielem], 0.0, dof_per_elem * sizeof(TacsScalar));
+      // cudaMemset(&block_mat[ielem], 0.0, dof_per_elem * dof_per_elem * sizeof(TacsScalar));
+
+    }  // end of ithread check if statement
+
+    // once each thread is done copying global to shared data
+    __syncthreads(); 
+
 
     // loop over gauss points and derivative pass
     int32_t local_element = threadIdx.z;
@@ -4598,13 +4717,13 @@ __global__ void assembleJacobian_kernel(
     int32_t loop_bound = blockDim.x * (nderivs + blockDim.x - 1) / blockDim.x; // effectively ceil function here on nderivs
 
     for (int32_t ideriv = threadIdx.x; ideriv < loop_bound; ideriv += blockDim.x ) {
-        bool active_thread = local_element < elements_in_block && ideriv < nderivs; 
+        bool active_thread = local_element < elemPerBlock && ideriv < nderivs; 
 
         block_elements[local_element].addJacobian_kernel(
             ideriv, local_gauss,
             time, alpha, beta, gamma,
             block_Xpts[local_element], block_vars[local_element], block_dvars[local_element], block_ddvars[local_element],
-            block_res[local_element], block_mat[local_element],
+            block_res[local_element], block_mat[local_element]
         );
     }
 

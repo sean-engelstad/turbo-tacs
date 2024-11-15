@@ -10,6 +10,8 @@
 #include "TACSShellElementModel.h"
 #include "TACSShellElementTransform.h"
 #include "TACSShellUtilities.h"
+
+// A2D imports for automatic differentiation
 #include "adscalar.h"
 #include "a2dcore.h"
 
@@ -196,7 +198,7 @@ class TACSShellElement : public TACSElement {
   // GPU code
   #ifdef __CUDACC__
 
-    __device__ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
+    __device__ void addJacobian_kernel(
       int ideriv, int igauss,
       double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
       const TacsScalar Xpts[], const TacsScalar vars[], const TacsScalar dvars[], const TacsScalar ddvars[],
@@ -1057,7 +1059,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
       res[ivar] = resA2D[ivar].value;
       
       // write in the ideriv column of the matrix
-      mat[N * ivar + ideriv] = resA2D[ivar].deriv[jvar];
+      mat[N * ivar + ideriv] = resA2D[ivar].deriv[ideriv];
     }
   }
 }
