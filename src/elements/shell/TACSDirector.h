@@ -228,6 +228,31 @@ class TACSLinearizedRotation {
 
   /**
     Compute the director and rates at all nodes.
+    Smaller method for just static problem
+
+    d = Q(q)*t = (C(q)^{T} - I)*t
+    ddot = d/dt(Q(q))*t
+
+    @param vars The full variable vector
+    @param t The reference directions
+    @param d The director values
+  */
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void computeDirectorRates(const T vars[],
+                                   const T t[], T d[]) {
+    const T *q = &vars[offset];
+    for (int i = 0; i < num_nodes; i++) {
+      crossProduct<T>(q, t, d);
+
+      t += 3;
+      d += 3;
+
+      q += vars_per_node;
+    }
+  }
+
+  /**
+    Compute the director and rates at all nodes.
 
     d = Q(q)*t = (C(q)^{T} - I)*t
     ddot = d/dt(Q(q))*t
@@ -349,6 +374,24 @@ class TACSLinearizedRotation {
   static void addDirectorResidual(const T vars[],
                                   const T dvars[],
                                   const T ddvars[],
+                                  const T t[], const T dd[],
+                                  T res[]) {
+    T *r = &res[offset];
+
+    for (int i = 0; i < num_nodes; i++) {
+      crossProductAdd(T(1.0), t, dd, r);
+
+      r += vars_per_node;
+      dd += 3;
+      t += 3;
+    }
+  }
+
+  /**
+   add shorter version of addDirectorResidual for static only case
+  */
+  template <typename T, int vars_per_node, int offset, int num_nodes>
+  static void addDirectorResidual(const T vars[],
                                   const T t[], const T dd[],
                                   T res[]) {
     T *r = &res[offset];

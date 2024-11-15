@@ -19,7 +19,7 @@ TACS_CC_FLAGS = ${TACS_OPT_CC_FLAGS}
 
 # Set the linking flags to use
 TACS_EXTERN_LIBS = ${AMD_LIBS} ${METIS_LIB} ${LAPACK_LIBS} ${TECIO_LIBS}
-TACS_LD_FLAGS = ${EXTRA_LD_FLAGS} ${TACS_LD_CMD} ${TACS_EXTERN_LIBS} ${MPI_LIB} -lmpi
+TACS_LD_FLAGS = ${EXTRA_LD_FLAGS} ${TACS_LD_CMD} ${TACS_EXTERN_LIBS} ${MPI_LIB} ${CUDA_LIBS}
 
 # This is the one rule that is used to compile all the
 # source code in TACS

@@ -17,15 +17,17 @@ GPU_CXX := nvcc
 GPU_CC_FLAGS :=
 MPI_INC =
 MPI_LIB =
+CUDA_LIBS :=
 
 ifeq ($(GPU), true)
     # dynamically add MPI_INC and MPI_LIB from MPI compiler
     # since NVIDIA CUDA compiler not linked to MPI
-    MPI_INC := -I$(shell ${CXX} -showme:incdirs)
-    MPI_LIB := -L$(shell ${CXX} -showme:libdirs)
+    MPI_INC := $(shell ${CXX} -showme:incdirs | sed 's|[^ ]*|-I&|g')
+    MPI_LIB := $(shell ${CXX} -showme:libdirs | sed 's|[^ ]*|-L&|g') -lmpi
+    CUDA_LIBS := -L/usr/local/cuda/lib64 -lcudart
 
     CXX := $(GPU_CXX)
-    GPU_CC_FLAGS := -Xcompiler
+    GPU_CC_FLAGS := -x cu -Xcompiler
 endif
 
 # declare A2D location for headers
@@ -51,8 +53,6 @@ TACS_LD_CMD=-L${TACS_DIR}/lib/ -Wl,-rpath,${TACS_DIR}/lib -la2dshells
 
 ifeq ($(GPU), true)
     TACS_LD_CMD := -L${TACS_DIR}/lib/ -Xlinker -rpath -Xlinker ${TACS_DIR}/lib -la2dshells
-
-    CXX := $(GPU_CXX) -Xcompiler
 endif
 
 # For linux systems, use the following settings:
@@ -62,6 +62,10 @@ SO_LINK_FLAGS=-fPIC -shared
 # For MAC OS X, use the following settings:
 # SO_EXT=so
 # SO_LINK_FLAGS=-fPIC -dynamiclib
+
+ifeq ($(GPU), true)
+    SO_LINK_FLAGS := -Xcompiler ${SO_LINK_FLAGS}
+endif
 
 # This uses the default installation of LAPACK.
 # Use an optimized version of LAPACK if available.

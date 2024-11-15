@@ -823,15 +823,15 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
   using T = A2D::ADScalar<double,1>;
 
   // be careful with how many floats you can store on each thread..
-  T U[N], dU[N], ddU[N], resA2D[N], XptsAD[3*num_nodes];
+  // NOTE : took out dynamics for now since can't go over 255 doubles per thread (so only doing statics)
+  // TODO : write Telem (dynamic stiffness matrix computation on separate kernel?)
+  T U[N], resA2D[N], XptsAD[3*num_nodes];
+  // comment out kinetic energy section for now (since too many doubles per thread used maybe)
+  // T dU[N], ddU[N];
 
   // TODO : check Kinetic energy part works too
   for (int ivar = 0; ivar < N; ivar++) {
     U[ivar].value = vars[ivar];
-    U[ivar].deriv[ivar] = 1.0;  // dUi / dUi = 1.0 (self-derivative only NZ values)
-    dU[ivar].value = dvars[ivar];
-    ddU[ivar].value = ddvars[ivar];
-    ddU[ivar].deriv[ivar] = 1.0;
   }
   // instead of if statement in for loop, do this to prevent branch statement problems which would
   // slow down the thread
@@ -858,14 +858,15 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
 
   // Store information about the transformation and derivatives at each node for
   // the drilling degrees of freedom
+  // TODO : may want to also do interpolation in this method as well to reduce load on each thread..
   T XdinvTn[9 * num_nodes], Tn[9 * num_nodes];
   T u0xn[9 * num_nodes], Ctn[csize];
   TacsShellComputeDrillStrain<T, vars_per_node, offset, basis, director, model>(
       transform, Xdn, fn, U, XdinvTn, Tn, u0xn, Ctn, etn);
 
-  T d[dsize], ddot[dsize], dddot[dsize];
-  director::template computeDirectorRates<T, vars_per_node, offset, num_nodes>(
-      U, dU, ddU, fn, d, ddot, dddot);
+  T d[dsize];
+  // T ddot[dsize], dddot[dsize]; // comment out for just static part to reduce load on each thread
+  director::template computeDirectorRates<T, vars_per_node, offset, num_nodes>(U, fn, d);
 
   // Compute the tying strain values
   T ety[basis::NUM_TYING_POINTS], dety[basis::NUM_TYING_POINTS];
@@ -993,46 +994,47 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
 
   // TODO : maybe we can free up the static strain energy objects here?
 
-  // setup before kinetic energy stack
-  // ------------------------------------
+  // commenting out to reduce load on each thread (bc too many doubles per thread maybe)
+  // // setup before kinetic energy stack
+  // // ------------------------------------
 
-  // passive variables
-  A2D::Vec<T,3> moments;
-  A2D::ADObj<A2D::Vec<T,3>> u0ddot, d0ddot; // had to make no longer passive just for forward scalar..
+  // // passive variables
+  // A2D::Vec<T,3> moments;
+  // A2D::ADObj<A2D::Vec<T,3>> u0ddot, d0ddot; // had to make no longer passive just for forward scalar..
 
-  // active variables
-  A2D::ADObj<T> uu_term, ud_term1, ud_term2, dd_term, dTelem_dt;
-  A2D::ADObj<A2D::Vec<T,3>> u0dot, d0dot;
+  // // active variables
+  // A2D::ADObj<T> uu_term, ud_term1, ud_term2, dd_term, dTelem_dt;
+  // A2D::ADObj<A2D::Vec<T,3>> u0dot, d0dot;
 
-  // evaluate mass moments
-  // don't need elemIndex input (doesn't use it..)
-  con->evalMassMoments<T>(0, pt, X.get_data(), moments.get_data());
+  // // evaluate mass moments
+  // // don't need elemIndex input (doesn't use it..)
+  // con->evalMassMoments<T>(0, pt, X.get_data(), moments.get_data());
 
-  // interpolate first time derivatives
-  basis::template interpFields<T, vars_per_node, 3>(pt, dU, u0dot.value().get_data());
-  basis::template interpFields<T, 3, 3>(pt, ddot, d0dot.value().get_data());
+  // // interpolate first time derivatives
+  // basis::template interpFields<T, vars_per_node, 3>(pt, dU, u0dot.value().get_data());
+  // basis::template interpFields<T, 3, 3>(pt, ddot, d0dot.value().get_data());
 
-  // interpolate second time derivatives
-  basis::template interpFields<T, vars_per_node, 3>(pt, ddU, u0ddot.value().get_data());
-  basis::template interpFields<T, 3, 3>(pt, dddot, d0ddot.value().get_data());
+  // // interpolate second time derivatives
+  // basis::template interpFields<T, vars_per_node, 3>(pt, ddU, u0ddot.value().get_data());
+  // basis::template interpFields<T, 3, 3>(pt, dddot, d0ddot.value().get_data());
 
-  // due to integration by parts, residual is based on dT/dt, time derivative of KE so 1st and 2nd time derivatives used
-  //   double check: but Jacobian should be obtained with a cross Hessian d^2(dT/dt)/du0dot/du0ddot (and same for directors d0)
-  auto kinetic_energy_stack = A2D::MakeStack(
-    A2D::VecDot(u0dot, u0ddot, uu_term),
-    A2D::VecDot(u0dot, d0ddot, ud_term1),
-    A2D::VecDot(u0ddot, d0dot, ud_term2),
-    A2D::VecDot(d0dot, d0ddot, dd_term),
-    Eval(detXd * (Trev(moments[0]) * uu_term + Trev(moments[1]) * (ud_term1 + ud_term2) + Trev(moments[2]) * dd_term), dTelem_dt)
-  );
+  // // due to integration by parts, residual is based on dT/dt, time derivative of KE so 1st and 2nd time derivatives used
+  // //   double check: but Jacobian should be obtained with a cross Hessian d^2(dT/dt)/du0dot/du0ddot (and same for directors d0)
+  // auto kinetic_energy_stack = A2D::MakeStack(
+  //   A2D::VecDot(u0dot, u0ddot, uu_term),
+  //   A2D::VecDot(u0dot, d0ddot, ud_term1),
+  //   A2D::VecDot(u0ddot, d0dot, ud_term2),
+  //   A2D::VecDot(d0dot, d0ddot, dd_term),
+  //   Eval(detXd * (Trev(moments[0]) * uu_term + Trev(moments[1]) * (ud_term1 + ud_term2) + Trev(moments[2]) * dd_term), dTelem_dt)
+  // );
 
-  // now reverse to from dTelem_dt => u0dot, d0dot sensitivities
-  dTelem_dt.bvalue() = T(1.0);
-  kinetic_energy_stack.reverse();
+  // // now reverse to from dTelem_dt => u0dot, d0dot sensitivities
+  // dTelem_dt.bvalue() = T(1.0);
+  // kinetic_energy_stack.reverse();
 
-  // backpropagate the time derivatives to the residual
-  basis::template addInterpFieldsTranspose<T, vars_per_node, 3>(pt, u0dot.bvalue().get_data(), resA2D);
-  basis::template addInterpFieldsTranspose<T, 3, 3>(pt, d0dot.bvalue().get_data(), dd);
+  // // backpropagate the time derivatives to the residual
+  // basis::template addInterpFieldsTranspose<T, vars_per_node, 3>(pt, u0dot.bvalue().get_data(), resA2D);
+  // basis::template addInterpFieldsTranspose<T, 3, 3>(pt, d0dot.bvalue().get_data(), dd);
   
   // end of what was the gauss pt loop call (now done outside kernel)
 
@@ -1045,8 +1047,10 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
       XptsAD, fn, U, d, dety, resA2D, dd);
 
   // Add the contributions to the director field
+  // director::template addDirectorResidual<T, vars_per_node, offset, num_nodes>(
+  //     U, dU, ddU, fn, dd, resA2D);
   director::template addDirectorResidual<T, vars_per_node, offset, num_nodes>(
-      U, dU, ddU, fn, dd, resA2D);
+      U, fn, dd, resA2D);
 
   // Add the contribution from the rotation constraint (defined by the
   // rotational parametrization) - if any
@@ -1064,7 +1068,7 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian_kernel(
   }
 }
 
-#endif
+#endif // __CUDACC__
 
 template <class quadrature, class basis, class director, class model>
 void TACSShellElement<quadrature, basis, director, model>::getMatType(
