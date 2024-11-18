@@ -37,7 +37,7 @@
   out:  the resulting vector
 */
 template <typename T>
-static inline void crossProduct(const T x[], const T y[],
+__HOST_DEVICE__ static inline void crossProduct(const T x[], const T y[],
                                 T out[]) {
   out[0] = (x[1] * y[2] - x[2] * y[1]);
   out[1] = (x[2] * y[0] - x[0] * y[2]);
@@ -58,10 +58,11 @@ static inline void crossProduct(const T x[], const T y[],
   out:  the resulting vector
   sout: sensitivity of the resulting vector
 */
-static inline void crossProductSens(const TacsScalar A[], const TacsScalar B[],
-                                    const TacsScalar sA[],
-                                    const TacsScalar sB[], TacsScalar out[],
-                                    TacsScalar sout[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void crossProductSens(const T A[], const T B[],
+                                    const T sA[],
+                                    const T sB[], T out[],
+                                    T sout[]) {
   //   (A2 * B3 - A3 * B2 ), ( A3 *B1 - A1 * B3 ), ( A1 * B2 - A2 * B1 )
 
   out[0] = A[1] * B[2] - A[2] * B[1];
@@ -86,8 +87,9 @@ static inline void crossProductSens(const TacsScalar A[], const TacsScalar B[],
   output:
   out:  the resulting vector
 */
-static inline void crossProduct(const TacsScalar a, const TacsScalar x[],
-                                const TacsScalar y[], TacsScalar out[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void crossProduct(const T a, const T x[],
+                                const T y[], T out[]) {
   out[0] = a * (x[1] * y[2] - x[2] * y[1]);
   out[1] = a * (x[2] * y[0] - x[0] * y[2]);
   out[2] = a * (x[0] * y[1] - x[1] * y[0]);
@@ -107,7 +109,7 @@ static inline void crossProduct(const TacsScalar a, const TacsScalar x[],
   out:  the resulting vector
 */
 template <typename T>
-static inline void crossProductAdd(const T a, const T x[],
+__HOST_DEVICE__ static inline void crossProductAdd(const T a, const T x[],
                                    const T y[], T out[]) {
   out[0] += a * (x[1] * y[2] - x[2] * y[1]);
   out[1] += a * (x[2] * y[0] - x[0] * y[2]);
@@ -122,7 +124,7 @@ static inline void crossProductAdd(const T a, const T x[],
   x:   the vector
 */
 template <typename T>
-static inline void vec3Scale(const T a, T x[]) {
+__HOST_DEVICE__ static inline void vec3Scale(const T a, T x[]) {
   x[0] *= a;
   x[1] *= a;
   x[2] *= a;
@@ -140,7 +142,7 @@ static inline void vec3Scale(const T a, T x[]) {
   returns: the dot product
 */
 template <typename T>
-static inline T vec3Dot(const T x[], const T y[]) {
+__HOST_DEVICE__ static inline T vec3Dot(const T x[], const T y[]) {
   return (x[0] * y[0] + x[1] * y[1] + x[2] * y[2]);
 }
 
@@ -156,8 +158,9 @@ static inline T vec3Dot(const T x[], const T y[]) {
   in/out:
   y:    the result
 */
-static inline void vec3Axpy(const TacsScalar a, const TacsScalar x[],
-                            TacsScalar y[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void vec3Axpy(const T a, const T x[],
+                            T y[]) {
   y[0] += a * x[0];
   y[1] += a * x[1];
   y[2] += a * x[2];
@@ -170,7 +173,8 @@ static inline void vec3Axpy(const TacsScalar a, const TacsScalar x[],
   a:   the scalar
   x:   the vector
 */
-static inline void vec2Scale(const TacsScalar a, TacsScalar x[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void vec2Scale(const TacsScalar a, TacsScalar x[]) {
   x[0] *= a;
   x[1] *= a;
 }
@@ -186,7 +190,8 @@ static inline void vec2Scale(const TacsScalar a, TacsScalar x[]) {
 
   returns: the dot product
 */
-static inline TacsScalar vec2Dot(const TacsScalar x[], const TacsScalar y[]) {
+template <typename T>
+__HOST_DEVICE__ static inline T vec2Dot(const T x[], const T y[]) {
   return (x[0] * y[0] + x[1] * y[1]);
 }
 
@@ -202,7 +207,7 @@ static inline TacsScalar vec2Dot(const TacsScalar x[], const TacsScalar y[]) {
   in/out:
   y:    the result
 */
-static inline void vec2Axpy(const TacsScalar a, const TacsScalar x[],
+__HOST_DEVICE__ static inline void vec2Axpy(const TacsScalar a, const TacsScalar x[],
                             TacsScalar y[]) {
   y[0] += a * x[0];
   y[1] += a * x[1];
@@ -248,7 +253,7 @@ static inline void vec3x3Outer(const TacsReal a[], const TacsReal b[],
   C:   the resulting matrix
 */
 template <typename T>
-static inline void vec3x3OuterAdd(const T alpha, const T a[],
+__HOST_DEVICE__ static inline void vec3x3OuterAdd(const T alpha, const T a[],
                                   const T b[], T C[]) {
   C[0] += alpha * a[0] * b[0];
   C[1] += alpha * a[0] * b[1];
@@ -828,7 +833,7 @@ static inline void mat2x2SymmMultAdd(const TacsScalar A[], const TacsScalar x[],
   C:   the resulting matrix
 */
 template <typename T>
-static inline void mat3x3MatMult(const T A[], const T B[],
+__HOST_DEVICE__ static inline void mat3x3MatMult(const T A[], const T B[],
                                  T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
@@ -873,7 +878,7 @@ static inline void mat2x2MatMult(const TacsScalar A[], const TacsScalar B[],
   C:   the resulting matrix
 */
 template <typename T>
-static inline void mat3x3MatTransMult(const T A[],
+__HOST_DEVICE__ static inline void mat3x3MatTransMult(const T A[],
                                       const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
@@ -918,7 +923,7 @@ static inline void mat2x2MatTransMult(const TacsScalar A[],
   C:   the resulting matrix
 */
 template <typename T>
-static inline void mat3x3TransMatMult(const T A[],
+__HOST_DEVICE__ static inline void mat3x3TransMatMult(const T A[],
                                       const T B[], T C[]) {
   C[0] = A[0] * B[0] + A[3] * B[3] + A[6] * B[6];
   C[1] = A[0] * B[1] + A[3] * B[4] + A[6] * B[7];
@@ -962,8 +967,9 @@ static inline void mat2x2TransMatMult(const TacsScalar A[],
   output:
   C:   the resulting matrix
 */
-static inline void mat3x3MatMultAdd(const TacsScalar A[], const TacsScalar B[],
-                                    TacsScalar C[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void mat3x3MatMultAdd(const T A[], const T B[],
+                                    T C[]) {
   C[0] += A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
   C[3] += A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
   C[6] += A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
@@ -999,25 +1005,27 @@ static inline void mat2x2MatMultAdd(const TacsScalar A[], const TacsScalar B[],
 /*
   Compute D = A^{T}*B*C
 */
-static inline void mat3x3TransMatTransform(const TacsScalar A[],
-                                           const TacsScalar B[],
-                                           const TacsScalar C[],
-                                           TacsScalar D[]) {
-  TacsScalar tmp[9];
-  mat3x3TransMatMult(A, B, tmp);
-  mat3x3MatMult(tmp, C, D);
+template <typename T>
+__HOST_DEVICE__ static inline void mat3x3TransMatTransform(const T A[],
+                                           const T B[],
+                                           const T C[],
+                                           T D[]) {
+  T tmp[9];
+  mat3x3TransMatMult<T>(A, B, tmp);
+  mat3x3MatMult<T>(tmp, C, D);
 }
 
 /*
   Compute D += A^{T}*B*C
 */
-static inline void mat3x3TransMatTransformAdd(const TacsScalar A[],
-                                              const TacsScalar B[],
-                                              const TacsScalar C[],
-                                              TacsScalar D[]) {
-  TacsScalar tmp[9];
-  mat3x3TransMatMult(A, B, tmp);
-  mat3x3MatMultAdd(tmp, C, D);
+template <typename T>
+__HOST_DEVICE__ static inline void mat3x3TransMatTransformAdd(const T A[],
+                                              const T B[],
+                                              const T C[],
+                                              T D[]) {
+  T tmp[9];
+  mat3x3TransMatMult<T>(A, B, tmp);
+  mat3x3MatMultAdd<T>(tmp, C, D);
 }
 
 /*
@@ -1099,15 +1107,16 @@ static inline void mat3x3SymmTransform(const TacsScalar T[],
   output:
   A:  the 3x3 flattened symmetric matrix
 */
-static inline void mat3x3SymmTransformTranspose(const TacsScalar T[],
-                                                const TacsScalar S[],
-                                                TacsScalar A[]) {
+template <typename T1>
+__HOST_DEVICE__ inline void mat3x3SymmTransformTranspose(const T1 T[],
+                                                const T1 S[],
+                                                T1 A[]) {
   // Compute W = S*T
   // [S[0] S[1] S[2]][T[0] T[1] T[2]]
   // [S[1] S[3] S[4]][T[3] T[4] T[5]]
   // [S[2] S[4] S[5]][T[6] T[7] T[8]]
 
-  TacsScalar W[9];
+  T1 W[9];
   W[0] = S[0] * T[0] + S[1] * T[3] + S[2] * T[6];
   W[1] = S[0] * T[1] + S[1] * T[4] + S[2] * T[7];
   W[2] = S[0] * T[2] + S[1] * T[5] + S[2] * T[8];
@@ -1184,10 +1193,11 @@ static inline void mat3x3SymmTransformSens(const TacsScalar T[],
   output:
   dS:  the derivative w.r.t. the 3x3 flattened symmetric matrix
 */
-static inline void mat3x3SymmTransformTransSens(const TacsScalar T[],
-                                                const TacsScalar dA[],
-                                                TacsScalar dS[]) {
-  TacsScalar dW[9];
+template <typename T1>
+static __HOST_DEVICE__ void mat3x3SymmTransformTransSens(const T1 T[],
+                                                const T1 dA[],
+                                                T1 dS[]) {
+  T1 dW[9];
   dW[0] = T[0] * dA[0];
   dW[1] = T[0] * dA[1] + T[1] * dA[3];
   dW[2] = T[0] * dA[2] + T[1] * dA[4] + T[2] * dA[5];
@@ -1430,8 +1440,9 @@ static inline void mat2x2TransMatMultAdd(const TacsScalar A[],
   output:
   C:   the resulting matrix
 */
-static inline void mat3x3MatTransMultAdd(const TacsScalar A[],
-                                         const TacsScalar B[], TacsScalar C[]) {
+template <typename T>
+__HOST_DEVICE__ static void mat3x3MatTransMultAdd(const T A[],
+                                         const T B[], T C[]) {
   C[0] += A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
   C[3] += A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
   C[6] += A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
@@ -1524,7 +1535,7 @@ static inline void matSymmMat3x4Mult(const TacsScalar A[], const TacsScalar B[],
   C:    the result is added to this matrix
 */
 template <typename T>
-static inline void setMatSkew(const T a, const T b[],
+__HOST_DEVICE__ static inline void setMatSkew(const T a, const T b[],
                               T C[]) {
   C[0] = 0.0;
   C[1] = -a * b[2];
@@ -1987,7 +1998,7 @@ static inline void det3x32ndSens(const TacsScalar s, const TacsScalar A[],
   returns:    the determinant of A
 */
 template <typename T>
-static inline T inv3x3(const T A[], T Ainv[]) {
+__HOST_DEVICE__ static inline T inv3x3(const T A[], T Ainv[]) {
   T det =
       (A[8] * (A[0] * A[4] - A[3] * A[1]) - A[7] * (A[0] * A[5] - A[3] * A[2]) +
        A[6] * (A[1] * A[5] - A[2] * A[4]));
@@ -2018,8 +2029,9 @@ static inline T inv3x3(const T A[], T Ainv[]) {
   output:
   Ainvd:      derivative of the inverse of the 3x3 matrix
 */
-static inline void inv3x3Sens(const TacsScalar Ainv[], const TacsScalar Ainvd[],
-                              TacsScalar Ad[]) {
+template <typename T>
+__HOST_DEVICE__ static inline void inv3x3Sens(const T Ainv[], const T Ainvd[],
+                              T Ad[]) {
   // d(Ainv_{kl})/d(A_{ij})
   //  = -Ainv_{kn}*delta_{ni}*delta{mj}*Ainv_{ml}
   //  = -Ainv_{ki}*Ainv_{jl}
@@ -2029,9 +2041,9 @@ static inline void inv3x3Sens(const TacsScalar Ainv[], const TacsScalar Ainvd[],
   //  = -Ainv_{ki}*Ainv_{jl}*Ainvd_{kl}
 
   // Ad = -Ainv^{T}*Ainvd*Ainv^{T}
-  TacsScalar t[9];
-  mat3x3TransMatMult(Ainv, Ainvd, t);
-  mat3x3MatTransMult(t, Ainv, Ad);
+  T t[9];
+  mat3x3TransMatMult<T>(Ainv, Ainvd, t);
+  mat3x3MatTransMult<T>(t, Ainv, Ad);
 
   Ad[0] = -Ad[0];
   Ad[1] = -Ad[1];

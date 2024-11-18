@@ -59,6 +59,17 @@ typedef double TacsScalar;
 #endif
 
 /*
+CUDA header declarations
+*/
+#ifdef __CUDACC__
+#define __HOST_DEVICE__ __host__ __device__
+#define __DEVICE__ __device__
+#else
+#define __HOST_DEVICE__ 
+#define __DEVICE__
+#endif
+
+/*
   Define the macro to add flop counts. This does not work for threaded
   implementations. Don't use it in threaded code!
 

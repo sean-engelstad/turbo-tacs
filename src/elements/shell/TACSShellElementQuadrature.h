@@ -20,7 +20,7 @@ class TACSQuadLinearQuadrature {
     return TacsGaussQuadWts2[n % 2] * TacsGaussQuadWts2[n / 2];
   }
   template <typename T>
-  static T getQuadraturePoint(int n, T pt[]) {
+  __HOST_DEVICE__ static T getQuadraturePoint(int n, T pt[]) {
     pt[0] = T(TacsGaussQuadPts2[n % 2]);
     pt[1] = T(TacsGaussQuadPts2[n / 2]);
 

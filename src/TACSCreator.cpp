@@ -895,10 +895,6 @@ TACSAssembler *TACSCreator::createTACS() {
   if (use_reordering) {
     tacs->reorderVec(X);
   }
-
-  // Set the node locations
-  tacs->setNodes(X);
-  X->decref();
   
   // allocate data on device if GPU
   #ifdef __CUDACC__
@@ -906,6 +902,10 @@ TACSAssembler *TACSCreator::createTACS() {
     tacs->allocateDeviceData();
 
   #endif
+
+  // Set the node locations
+  tacs->setNodes(X);
+  X->decref();
 
   // Free all the remaining memory
   delete[] local_elem_node_ptr;

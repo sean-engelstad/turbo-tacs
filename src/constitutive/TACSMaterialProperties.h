@@ -90,6 +90,27 @@ class TACSMaterialProperties : public TACSObject {
   template <typename T>
   void evalTangentStiffness2D(T C[]);
 
+  template <typename T>
+  __HOST_DEVICE__ void evalTangentStiffness2D_kernel(T C[]) {
+    if (mat_type == TACS_ISOTROPIC_MATERIAL) {
+      T D = E / (1.0 - nu * nu);
+      C[0] = D;
+      C[1] = nu * D;
+      C[2] = 0.0;
+      C[3] = D;
+      C[4] = 0.0;
+      C[5] = G;
+    } else {
+      T nu21 = nu12 * E2 / E1;
+      C[0] = E1 / (1.0 - nu12 * nu21);
+      C[1] = nu12 * E2 / (1.0 - nu12 * nu21);
+      C[2] = 0.0;
+      C[3] = E2 / (1.0 - nu12 * nu21);
+      C[4] = 0.0;
+      C[5] = G12;
+    }
+  }
+
   // Evaluate the thermal conductivity matrices
   void evalTangentHeatFlux3D(TacsScalar Kc[]);
   void evalTangentHeatFlux2D(TacsScalar Kc[]);

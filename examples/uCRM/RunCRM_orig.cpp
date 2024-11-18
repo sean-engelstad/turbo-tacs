@@ -135,7 +135,7 @@ int main() {
     double t1 = MPI_Wtime();
 
     double alpha = 1.0, beta = 0.0, gamma = 0.0;
-    assembler->assembleJacobian(alpha, beta, gamma, NULL, matrix);
+    assembler->assembleJacobian<Quad4ShellOrig>(alpha, beta, gamma, NULL, matrix);
  
     double t2 = MPI_Wtime();
     //auto t2 = std::chrono::high_resolution_clock::now();

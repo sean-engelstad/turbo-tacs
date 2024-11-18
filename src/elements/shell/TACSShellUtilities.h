@@ -6,7 +6,7 @@
 #include "TACSShellElementTransform.h"
 
 template <typename T>
-inline void TacsShellAssembleFrame(const T Xxi[], const T n[], T Xd[]) {
+__HOST_DEVICE__ inline void TacsShellAssembleFrame(const T Xxi[], const T n[], T Xd[]) {
   Xd[0] = Xxi[0];
   Xd[1] = Xxi[1];
   Xd[2] = n[0];
@@ -21,7 +21,7 @@ inline void TacsShellAssembleFrame(const T Xxi[], const T n[], T Xd[]) {
 }
 
 template <typename T>
-inline void TacsShellAssembleFrame(const T nxi[], T Xdz[]) {
+__HOST_DEVICE__ inline void TacsShellAssembleFrame(const T nxi[], T Xdz[]) {
   Xdz[0] = nxi[0];
   Xdz[1] = nxi[1];
   Xdz[2] = 0.0;
@@ -36,7 +36,7 @@ inline void TacsShellAssembleFrame(const T nxi[], T Xdz[]) {
 }
 
 template <typename T>
-inline void TacsShellAssembleFrame(const T a[], const T b[],
+__HOST_DEVICE__ inline void TacsShellAssembleFrame(const T a[], const T b[],
                                    const T c[], T Xd[]) {
   if (a) {
     Xd[0] = a[0];
@@ -70,7 +70,7 @@ inline void TacsShellAssembleFrame(const T a[], const T b[],
 }
 
 template <typename T>
-inline void TacsShellExtractFrame(const T Xd[], T Xxi[],
+__HOST_DEVICE__ inline void TacsShellExtractFrame(const T Xd[], T Xxi[],
                                   T n[]) {
   Xxi[0] = Xd[0];
   Xxi[1] = Xd[1];
@@ -86,7 +86,7 @@ inline void TacsShellExtractFrame(const T Xd[], T Xxi[],
 }
 
 template <typename T>
-inline void TacsShellExtractFrame(const T Xd[], T Xxi[]) {
+__HOST_DEVICE__ inline void TacsShellExtractFrame(const T Xd[], T Xxi[]) {
   Xxi[0] = Xd[0];
   Xxi[1] = Xd[1];
 
@@ -97,7 +97,7 @@ inline void TacsShellExtractFrame(const T Xd[], T Xxi[]) {
   Xxi[5] = Xd[7];
 }
 
-inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
+__HOST_DEVICE__ inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
                                       TacsScalar d2u0xi[]) {
   // Extract the second derivatives
   for (int j = 0; j < 6; j++) {
@@ -110,7 +110,7 @@ inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
   }
 }
 
-inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
+__HOST_DEVICE__ inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
                                       TacsScalar d2u0xi[], TacsScalar d2d0[],
                                       TacsScalar d2d0u0xi[]) {
   // Extract the second derivatives
@@ -140,7 +140,7 @@ inline void TacsShellExtractFrameSens(const TacsScalar d2u0d[],
   }
 }
 
-inline void TacsShellExtractFrameMixedSens(const TacsScalar d2u0du1d[],
+__HOST_DEVICE__ inline void TacsShellExtractFrameMixedSens(const TacsScalar d2u0du1d[],
                                            TacsScalar d2d0xiu0xi[],
                                            TacsScalar d2d0d0xi[]) {
   // Extract the second derivatives
@@ -303,7 +303,7 @@ inline void mat3x3TransMatMatHessianAddSymm(
   @param fnorm Optional: the norm of the cross-product
 */
 template <typename T, class basis>
-void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
+__HOST_DEVICE__ void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
                                  T Xdn[] = NULL,
                                  T fnorm[] = NULL) {
   for (int i = 0; i < basis::NUM_NODES; i++) {
@@ -362,36 +362,36 @@ void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
   @param u0x Derivative of the displacement in the local x coordinates
   @param u1x Derivative of the through-thickness disp. in local x coordinates
 */
-template <int vars_per_node, class basis>
-TacsScalar TacsShellComputeDispGrad(const double pt[], const TacsScalar Xpts[],
-                                    const TacsScalar vars[],
-                                    const TacsScalar fn[], const TacsScalar d[],
-                                    const TacsScalar Xxi[],
-                                    const TacsScalar n0[], const TacsScalar T[],
-                                    TacsScalar XdinvT[], TacsScalar XdinvzT[],
-                                    TacsScalar u0x[], TacsScalar u1x[]) {
+template <typename T1, int vars_per_node, class basis>
+__HOST_DEVICE__ T1 TacsShellComputeDispGrad(const T1 pt[], const T1 Xpts[],
+                                    const T1 vars[],
+                                    const T1 fn[], const T1 d[],
+                                    const T1 Xxi[],
+                                    const T1 n0[], const T1 T[],
+                                    T1 XdinvT[], T1 XdinvzT[],
+                                    T1 u0x[], T1 u1x[]) {
   // Compute n,xi = [dn/dxi1; dn/dxi2]
-  TacsScalar nxi[6];
-  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, fn, nxi);
+  T1 nxi[6];
+  basis::template interpFieldsGrad<T1,3, 3>(pt, fn, nxi);
 
   // Assemble the terms Xd = [Xxi; n] and Xdz
-  TacsScalar Xd[9], Xdz[9];
-  TacsShellAssembleFrame(Xxi, n0, Xd);
-  TacsShellAssembleFrame(nxi, Xdz);
+  T1 Xd[9], Xdz[9];
+  TacsShellAssembleFrame<T1>(Xxi, n0, Xd);
+  TacsShellAssembleFrame<T1>(nxi, Xdz);
 
   // Compute the inverse of the 3x3 Jacobian transformation
-  TacsScalar Xdinv[9];
-  TacsScalar detXd = inv3x3(Xd, Xdinv);
+  T1 Xdinv[9];
+  T1 detXd = inv3x3<T1>(Xd, Xdinv);
 
   // Compute negXdinvXdz = -Xdinv*Xdz
-  TacsScalar negXdinvXdz[9];
-  mat3x3MatMult(Xdinv, Xdz, negXdinvXdz);
+  T1 negXdinvXdz[9];
+  mat3x3MatMult<T1>(Xdinv, Xdz, negXdinvXdz);
   for (int i = 0; i < 9; i++) {
     negXdinvXdz[i] *= -1.0;
   }
 
   // Compute XdinvT = Xdinv*T
-  mat3x3MatMult(Xdinv, T, XdinvT);
+  mat3x3MatMult<T1>(Xdinv, T, XdinvT);
 
   // printf("detXd = %.8e\n", detXd);
   // for (int i = 0; i < 9; i++) {
@@ -402,17 +402,17 @@ TacsScalar TacsShellComputeDispGrad(const double pt[], const TacsScalar Xpts[],
   // }
 
   // Compute Xdinvz = -Xdinv*Xdz*Xdinv*T
-  mat3x3MatMult(negXdinvXdz, XdinvT, XdinvzT);
+  mat3x3MatMult<T1>(negXdinvXdz, XdinvT, XdinvzT);
 
   // Compute the director field and the gradient of the director
   // field at the specified point
-  TacsScalar d0[3], d0xi[6];
-  basis::template interpFields<TacsScalar,3, 3>(pt, d, d0);
-  basis::template interpFieldsGrad<TacsScalar,3, 3>(pt, d, d0xi);
+  T1 d0[3], d0xi[6];
+  basis::template interpFields<T1,3, 3>(pt, d, d0);
+  basis::template interpFieldsGrad<T1,3, 3>(pt, d, d0xi);
 
   // Compute the gradient of the displacement solution at the quadrature points
-  TacsScalar u0xi[6];
-  basis::template interpFieldsGrad<TacsScalar,vars_per_node, 3>(pt, vars, u0xi);
+  T1 u0xi[6];
+  basis::template interpFieldsGrad<T1,vars_per_node, 3>(pt, vars, u0xi);
 
   // for (int i = 0; i < 3; i++) {
   //   printf("d0[%d] = %.8e\n", i, d0[i]);
@@ -424,19 +424,19 @@ TacsScalar TacsShellComputeDispGrad(const double pt[], const TacsScalar Xpts[],
   // }
 
   // Compute the derivative u0,x
-  TacsShellAssembleFrame(u0xi, d0, u0x);  // Use u0x to store [u0,xi; d0]
+  TacsShellAssembleFrame<T1>(u0xi, d0, u0x);  // Use u0x to store [u0,xi; d0]
 
   // u1x = T^{T}*u1d*XdinvT + T^{T}*u0d*XdinvzT
-  TacsScalar tmp[9];
-  TacsShellAssembleFrame(d0xi, u1x);  // Use u1x to store [d0,xi; 0]
-  mat3x3MatMult(u1x, XdinvT, tmp);
-  mat3x3MatMultAdd(u0x, XdinvzT, tmp);
-  mat3x3TransMatMult(T, tmp, u1x);
+  T1 tmp[9];
+  TacsShellAssembleFrame<T1>(d0xi, u1x);  // Use u1x to store [d0,xi; 0]
+  mat3x3MatMult<T1>(u1x, XdinvT, tmp);
+  mat3x3MatMultAdd<T1>(u0x, XdinvzT, tmp);
+  mat3x3TransMatMult<T1>(T, tmp, u1x);
 
   // Compute the transformation u0x = T^{T}*ueta*Xdinv*T
   // u0x = T^{T}*u0d*Xdinv*T
-  mat3x3MatMult(u0x, XdinvT, tmp);
-  mat3x3TransMatMult(T, tmp, u0x);
+  mat3x3MatMult<T1>(u0x, XdinvT, tmp);
+  mat3x3TransMatMult<T1>(T, tmp, u0x);
 
   return detXd;
 }
@@ -548,29 +548,29 @@ TacsScalar TacsShellComputeDispGradDeriv(
   @param res The residual
   @param dd Residual intermediate for the director field
 */
-template <int vars_per_node, class basis>
-void TacsShellAddDispGradSens(const double pt[], const TacsScalar T[],
-                              const TacsScalar XdinvT[],
-                              const TacsScalar XdinvzT[],
-                              const TacsScalar du0x[], const TacsScalar du1x[],
-                              TacsScalar res[], TacsScalar dd[]) {
+template <typename T1, int vars_per_node, class basis>
+__HOST_DEVICE__ void TacsShellAddDispGradSens(const T1 pt[], const T1 T[],
+                              const T1 XdinvT[],
+                              const T1 XdinvzT[],
+                              const T1 du0x[], const T1 du1x[],
+                              T1 res[], T1 dd[]) {
   // Compute du0d = T*du0x*XdinvT^{T} + T*du1x*XdinvzT^{T}
-  TacsScalar du0d[9], tmp[9];
-  mat3x3MatTransMult(du1x, XdinvzT, tmp);
-  mat3x3MatTransMultAdd(du0x, XdinvT, tmp);
-  mat3x3MatMult(T, tmp, du0d);
+  T1 du0d[9], tmp[9];
+  mat3x3MatTransMult<T1>(du1x, XdinvzT, tmp);
+  mat3x3MatTransMultAdd<T1>(du0x, XdinvT, tmp);
+  mat3x3MatMult<T1>(T, tmp, du0d);
 
   // Compute du1d = T*du1x*XdinvT^{T}
-  TacsScalar du1d[9];
-  mat3x3MatTransMult(du1x, XdinvT, tmp);
-  mat3x3MatMult(T, tmp, du1d);
+  T1 du1d[9];
+  mat3x3MatTransMult<T1>(du1x, XdinvT, tmp);
+  mat3x3MatMult<T1>(T, tmp, du1d);
 
   // du0d = [du0xi; dd0]
-  TacsScalar du0xi[6], dd0[3];
-  TacsShellExtractFrame(du0d, du0xi, dd0);
+  T1 du0xi[6], dd0[3];
+  TacsShellExtractFrame<T1>(du0d, du0xi, dd0);
 
-  TacsScalar dd0xi[6];
-  TacsShellExtractFrame(du1d, dd0xi);
+  T1 dd0xi[6];
+  TacsShellExtractFrame<T1>(du1d, dd0xi);
 
   // debug for 1st order derivs
   // for (int i = 0; i < 3; i++) {
@@ -583,12 +583,12 @@ void TacsShellAddDispGradSens(const double pt[], const TacsScalar T[],
 
   // Compute the director field and the gradient of the director
   // field at the specified point
-  basis::template addInterpFieldsTranspose<TacsScalar,3, 3>(pt, dd0, dd);
-  basis::template addInterpFieldsGradTranspose<TacsScalar,3, 3>(pt, dd0xi, dd);
+  basis::template addInterpFieldsTranspose<T1,3, 3>(pt, dd0, dd);
+  basis::template addInterpFieldsGradTranspose<T1,3, 3>(pt, dd0xi, dd);
 
   // Compute the gradient of the displacement solution at the quadrature points
   if (res) {
-    basis::template addInterpFieldsGradTranspose<TacsScalar,vars_per_node, 3>(pt, du0xi,
+    basis::template addInterpFieldsGradTranspose<T1,vars_per_node, 3>(pt, du0xi,
                                                                    res);
   }
 }
@@ -697,7 +697,7 @@ void TacsShellAddDispGradHessian(const double pt[], const TacsScalar T[],
 */
 template <typename T, int vars_per_node, int offset, class basis, class director,
           class model>
-void TacsShellComputeDrillStrain(TACSShellTransform *transform,
+__HOST_DEVICE__ void TacsShellComputeDrillStrain(TACSShellTransform *transform,
                                  const T Xdn[], const T fn[],
                                  const T vars[], T XdinvTn[],
                                  T Tn[], T u0xn[],
@@ -828,7 +828,7 @@ void TacsShellComputeDrillStrainDeriv(
 */
 template <typename T, int vars_per_node, int offset, class basis, class director,
           class model>
-void TacsShellAddDrillStrainSens(const T Xdn[], const T fn[],
+__HOST_DEVICE__ void TacsShellAddDrillStrainSens(const T Xdn[], const T fn[],
                                  const T vars[],
                                  const T XdinvTn[],
                                  const T Tn[], const T u0xn[],

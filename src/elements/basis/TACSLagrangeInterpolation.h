@@ -15,16 +15,18 @@
 #ifndef TACS_LAGRANGE_INTERPOLATION_H
 #define TACS_LAGRANGE_INTERPOLATION_H
 
-static const double TacsGaussLobattoPoints2[] = {-1.0, 1.0};
+#include "TACSObject.h"
 
-static const double TacsGaussLobattoPoints3[] = {-1.0, 0.0, 1.0};
+__HOST_DEVICE__ static const double TacsGaussLobattoPoints2[] = {-1.0, 1.0};
 
-static const double TacsGaussLobattoPoints4[] = {-1.0, -0.5, 0.5, 1.0};
+__HOST_DEVICE__ static const double TacsGaussLobattoPoints3[] = {-1.0, 0.0, 1.0};
 
-static const double TacsGaussLobattoPoints5[] = {-1.0, -0.7071067811865475, 0.0,
+__HOST_DEVICE__ static const double TacsGaussLobattoPoints4[] = {-1.0, -0.5, 0.5, 1.0};
+
+__HOST_DEVICE__ static const double TacsGaussLobattoPoints5[] = {-1.0, -0.7071067811865475, 0.0,
                                                  0.7071067811865475, 1.0};
 
-static const double TacsGaussLobattoPoints6[] = {-1.0,
+__HOST_DEVICE__ static const double TacsGaussLobattoPoints6[] = {-1.0,
                                                  -0.8090169943749475,
                                                  -0.30901699437494745,
                                                  0.30901699437494745,
@@ -42,7 +44,7 @@ static const double TacsGaussLobattoPoints6[] = {-1.0,
   output:
   N:      the values of the shape functions at u
 */
-inline void TacsLagrangeShapeFunctions(const int order, const double u,
+__HOST_DEVICE__ inline void TacsLagrangeShapeFunctions(const int order, const double u,
                                        const double *knots, double *N) {
   // Loop over the shape functions
   for (int i = 0; i < order; i++) {
@@ -69,7 +71,7 @@ inline void TacsLagrangeShapeFunctions(const int order, const double u,
   N:      the values of the shape functions at u
   Nd:     the derivative of the shape functions at u
 */
-inline void TacsLagrangeShapeFuncDerivative(const int order, const double u,
+__HOST_DEVICE__ inline void TacsLagrangeShapeFuncDerivative(const int order, const double u,
                                             const double *knots, double *N,
                                             double *Nd) {
   // Loop over the shape function knot locations
@@ -112,7 +114,7 @@ inline void TacsLagrangeShapeFuncDerivative(const int order, const double u,
   Nd:     the derivative of the shape functions at u
   Ndd:    the second derivative of the shape functions at u
 */
-inline void TacsLagrangeShapeFuncSecondDerivative(const int order,
+__HOST_DEVICE__ inline void TacsLagrangeShapeFuncSecondDerivative(const int order,
                                                   const double u,
                                                   const double *knots,
                                                   double *N, double *Nd,

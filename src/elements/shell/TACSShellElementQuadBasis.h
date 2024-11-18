@@ -15,7 +15,7 @@ enum TacsShellTyingStrainComponent {
 };
 
 template <typename T, int order>
-inline void TacsLagrangeShapeFunction(const T u, const double knots[],
+__HOST_DEVICE__ inline void TacsLagrangeShapeFunction(const T u, const double knots[],
                                       T N[]) {
   // Loop over the shape functions
   for (int i = 0; i < order; i++) {
@@ -30,7 +30,7 @@ inline void TacsLagrangeShapeFunction(const T u, const double knots[],
 }
 
 template <typename T, int order>
-inline void TacsLagrangeShapeFuncDerivative(const T u,
+__HOST_DEVICE__ inline void TacsLagrangeShapeFuncDerivative(const T u,
                                             const double knots[], T N[],
                                             T Nd[]) {
   // Loop over the shape function knot locations
@@ -66,7 +66,7 @@ inline void TacsLagrangeShapeFuncDerivative(const T u,
 }
 
 template <typename T, int order>
-inline void TacsLagrangeLobattoShapeFunction(const T u, T *N) {
+__HOST_DEVICE__ static void TacsLagrangeLobattoShapeFunction(const T u, T *N) {
   if (order == 1) {
     N[0] = 1.0;
   } else if (order == 2) {
@@ -89,7 +89,7 @@ inline void TacsLagrangeLobattoShapeFunction(const T u, T *N) {
 }
 
 template <typename T, int order>
-inline void TacsLagrangeLobattoShapeFuncDerivative(const T u, T *N,
+__HOST_DEVICE__ inline void TacsLagrangeLobattoShapeFuncDerivative(const T u, T *N,
                                                    T *Nd) {
   if (order == 1) {
     N[0] = 1.0;
@@ -119,31 +119,54 @@ inline void TacsLagrangeLobattoShapeFuncDerivative(const T u, T *N,
   }
 }
 
-const double TacsShellLinearTyingPoints[2] = {-1.0, 1.0};
+__HOST_DEVICE__ const double TacsShellLinearTyingPoints[2] = {-1.0, 1.0};
 
 template <int order>
 class TACSShellQuadBasis {
  public:
-  static const int NUM_NODES = order * order;
+  // static const int NUM_NODES = order * order;
+
+  // // Set the number of tying points for each of the 5 components
+  // // of the tying strain
+  // static const int NUM_G11_TYING_POINTS = order * (order - 1);
+  // static const int NUM_G22_TYING_POINTS = order * (order - 1);
+  // static const int NUM_G12_TYING_POINTS = (order - 1) * (order - 1);
+  // static const int NUM_G13_TYING_POINTS = order * (order - 1);
+  // static const int NUM_G23_TYING_POINTS = order * (order - 1);
+
+  // // Set the offsets used to interpolate the tying strain
+  // static const int G11_OFFSET = NUM_G11_TYING_POINTS;
+  // static const int G22_OFFSET = (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS);
+  // static const int G12_OFFSET =
+  //     (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS + NUM_G12_TYING_POINTS);
+  // static const int G13_OFFSET = (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS +
+  //                                NUM_G12_TYING_POINTS + NUM_G13_TYING_POINTS);
+
+  // // Set the total number of tying points
+  // static const int NUM_TYING_POINTS =
+  //     NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS + NUM_G12_TYING_POINTS +
+  //     NUM_G13_TYING_POINTS + NUM_G23_TYING_POINTS;
+
+  // need accessible on host and device
+  static constexpr int NUM_NODES = order * order;
 
   // Set the number of tying points for each of the 5 components
-  // of the tying strain
-  static const int NUM_G11_TYING_POINTS = order * (order - 1);
-  static const int NUM_G22_TYING_POINTS = order * (order - 1);
-  static const int NUM_G12_TYING_POINTS = (order - 1) * (order - 1);
-  static const int NUM_G13_TYING_POINTS = order * (order - 1);
-  static const int NUM_G23_TYING_POINTS = order * (order - 1);
+  static constexpr int NUM_G11_TYING_POINTS = order * (order - 1);
+  static constexpr int NUM_G22_TYING_POINTS = order * (order - 1);
+  static constexpr int NUM_G12_TYING_POINTS = (order - 1) * (order - 1);
+  static constexpr int NUM_G13_TYING_POINTS = order * (order - 1);
+  static constexpr int NUM_G23_TYING_POINTS = order * (order - 1);
 
   // Set the offsets used to interpolate the tying strain
-  static const int G11_OFFSET = NUM_G11_TYING_POINTS;
-  static const int G22_OFFSET = (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS);
-  static const int G12_OFFSET =
+  static constexpr int G11_OFFSET = NUM_G11_TYING_POINTS;
+  static constexpr int G22_OFFSET = (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS);
+  static constexpr int G12_OFFSET =
       (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS + NUM_G12_TYING_POINTS);
-  static const int G13_OFFSET = (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS +
-                                 NUM_G12_TYING_POINTS + NUM_G13_TYING_POINTS);
+  static constexpr int G13_OFFSET =
+      (NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS + NUM_G12_TYING_POINTS + NUM_G13_TYING_POINTS);
 
   // Set the total number of tying points
-  static const int NUM_TYING_POINTS =
+  static constexpr int NUM_TYING_POINTS =
       NUM_G11_TYING_POINTS + NUM_G22_TYING_POINTS + NUM_G12_TYING_POINTS +
       NUM_G13_TYING_POINTS + NUM_G23_TYING_POINTS;
 
@@ -151,7 +174,7 @@ class TACSShellQuadBasis {
     Get the parametric points of each node in the element
   */
   template <typename T>
-  static void getNodePoint(const int n, T pt[]) {
+  __HOST_DEVICE__ static void getNodePoint(const int n, T pt[]) {
     pt[0] = -1.0 + (2.0 / (order - 1)) * (n % order);
     pt[1] = -1.0 + (2.0 / (order - 1)) * (n / order);
   }
@@ -176,7 +199,7 @@ class TACSShellQuadBasis {
   }
 
   template <typename T, int vars_per_node, int m>
-  static void interpFields(const T pt[], const T values[],
+  __HOST_DEVICE__ static void interpFields(const T pt[], const T values[],
                            T field[]) {
     T na[order], nb[order];
     TacsLagrangeLobattoShapeFunction<T,order>(pt[0], na);
@@ -197,7 +220,7 @@ class TACSShellQuadBasis {
   }
 
   template <typename T, int vars_per_node, int m>
-  static void addInterpFieldsTranspose(const T pt[],
+  __HOST_DEVICE__ static void addInterpFieldsTranspose(const T pt[],
                                        const T field[],
                                        T values[]) {
     T na[order], nb[order];
@@ -215,7 +238,7 @@ class TACSShellQuadBasis {
   }
 
   template <typename T, int vars_per_node, int m>
-  static void interpFieldsGrad(const T pt[], const T values[],
+  __HOST_DEVICE__ static void interpFieldsGrad(const T pt[], const T values[],
                                T grad[]) {
     T na[order], dna[order];
     T nb[order], dnb[order];
@@ -239,7 +262,7 @@ class TACSShellQuadBasis {
   }
 
   template <typename T, int vars_per_node, int m>
-  static void addInterpFieldsGradTranspose(const T pt[], T grad[],
+  __HOST_DEVICE__ static void addInterpFieldsGradTranspose(const T pt[], T grad[],
                                            T values[]) {
     T na[order], dna[order];
     T nb[order], dnb[order];
@@ -491,7 +514,7 @@ class TACSShellQuadBasis {
     @param index The index of the tying point
     @return The tying strain field index
   */
-  static inline TacsShellTyingStrainComponent getTyingField(int index) {
+  __HOST_DEVICE__ static inline TacsShellTyingStrainComponent getTyingField(int index) {
     if (index < G11_OFFSET) {
       return TACS_SHELL_G11_COMPONENT;
     } else if (index < G22_OFFSET) {
@@ -508,7 +531,7 @@ class TACSShellQuadBasis {
   /*
     Get the knots associated with the tying points
   */
-  static inline void getTyingKnots(const double **ty_knots_order,
+  __HOST_DEVICE__ static inline void getTyingKnots(const double **ty_knots_order,
                                    const double **ty_knots_reduced) {
     if (order == 2) {
       *ty_knots_order = TacsShellLinearTyingPoints;
@@ -535,7 +558,7 @@ class TACSShellQuadBasis {
     @param pt The parametric point associated with the tying point
   */
   template <typename T>
-  static inline void getTyingPoint(int ty_index, T pt[]) {
+  __HOST_DEVICE__ static inline void getTyingPoint(int ty_index, T pt[]) {
     const double *ty_knots_order, *ty_knots_reduced;
     getTyingKnots(&ty_knots_order, &ty_knots_reduced);
 
@@ -574,8 +597,8 @@ class TACSShellQuadBasis {
   /*
     Evaluate the interpolation for all of the tying points
   */
- template <typename T>
-  static void evalTyingInterp(const T pt[], T N[]) {
+  template <typename T>
+  __HOST_DEVICE__ static void evalTyingInterp(const T pt[], T N[]) {
     const double *ty_knots_order, *ty_knots_reduced;
     getTyingKnots(&ty_knots_order, &ty_knots_reduced);
 
@@ -627,18 +650,36 @@ class TACSShellQuadBasis {
   /*
     Get the number of tying points associated with each field
   */
-  static inline int getNumTyingPoints(const int field) {
-    if (field == TACS_SHELL_G11_COMPONENT) {
-      return NUM_G11_TYING_POINTS;
-    } else if (field == TACS_SHELL_G22_COMPONENT) {
-      return NUM_G22_TYING_POINTS;
-    } else if (field == TACS_SHELL_G12_COMPONENT) {
-      return NUM_G12_TYING_POINTS;
-    } else if (field == TACS_SHELL_G23_COMPONENT) {
-      return NUM_G23_TYING_POINTS;
-    } else if (field == TACS_SHELL_G13_COMPONENT) {
-      return NUM_G13_TYING_POINTS;
+  // removed inline
+  __HOST_DEVICE__ static int getNumTyingPoints(const int field) {
+    // if (field == TACS_SHELL_G11_COMPONENT) {
+    //   return NUM_G11_TYING_POINTS;
+    // } else if (field == TACS_SHELL_G22_COMPONENT) {
+    //   return NUM_G22_TYING_POINTS;
+    // } else if (field == TACS_SHELL_G12_COMPONENT) {
+    //   return NUM_G12_TYING_POINTS;
+    // } else if (field == TACS_SHELL_G23_COMPONENT) {
+    //   return NUM_G23_TYING_POINTS;
+    // } else if (field == TACS_SHELL_G13_COMPONENT) {
+    //   return NUM_G13_TYING_POINTS;
+    // }
+
+    // switch statement is more friendly to nvcc compiler (segfaults without it)
+    switch (field) {
+      case TACS_SHELL_G11_COMPONENT:
+        return NUM_G11_TYING_POINTS;
+      case TACS_SHELL_G22_COMPONENT:
+        return NUM_G22_TYING_POINTS;
+      case TACS_SHELL_G12_COMPONENT:
+        return NUM_G12_TYING_POINTS;
+      case TACS_SHELL_G23_COMPONENT:
+        return NUM_G23_TYING_POINTS;
+      case TACS_SHELL_G13_COMPONENT:
+        return NUM_G13_TYING_POINTS;
+      default:
+        return 0;
     }
+
     return 0;
   }
 
@@ -658,7 +699,7 @@ class TACSShellQuadBasis {
     @param gty The interpolated tying strain
   */
   template <typename T>
-  static inline void interpTyingStrain(const T pt[],
+  __HOST_DEVICE__ static void interpTyingStrain(const T pt[],
                                        const T ety[],
                                        T gty[]) {
     const int index[] = {0, 3, 1, 4, 2};
@@ -689,7 +730,7 @@ class TACSShellQuadBasis {
     @param dety The output derivative of the strain at the tying points
   */
   template <typename T>
-  static inline void addInterpTyingStrainTranspose(const T pt[],
+  __HOST_DEVICE__ static inline void addInterpTyingStrainTranspose(const T pt[],
                                                    const T dgty[],
                                                    T dety[]) {
     const int index[] = {0, 3, 1, 4, 2};

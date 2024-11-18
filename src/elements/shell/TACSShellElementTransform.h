@@ -17,7 +17,7 @@ class TACSShellTransform : public TACSObject {
 
   // TODO : can't template on virtual functions? (was virtual before here)..
   template <typename T>
-  void computeTransform(const T Xxi[], const T n0[],
+  __HOST_DEVICE__ void computeTransform(const T Xxi[], const T n0[],
                                 T Tmat[]) {}; // removed virtual here because
 };
 
@@ -26,7 +26,7 @@ class TACSShellNaturalTransform : public TACSShellTransform {
   TACSShellNaturalTransform() {}
 
   template <typename T>
-  void computeTransform(const T Xxi[], const T n0[],
+  __HOST_DEVICE__ void computeTransform(const T Xxi[], const T n0[],
                         T Tmat[]) {
     T n[3];
     n[0] = n0[0];
@@ -118,7 +118,7 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
   }
 
   template <typename T>
-  void computeTransform(const T Xxi[], const T n0[],
+  __HOST_DEVICE__ void computeTransform(const T Xxi[], const T n0[],
                         T Tmat[]) {
     T n[3];
     n[0] = n0[0];
@@ -126,11 +126,11 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     n[2] = n0[2];
 
     // Scale by the normal
-    T inv = 1.0 / sqrt(vec3Dot(n, n));
-    vec3Scale(inv, n);
+    T inv = 1.0 / sqrt(vec3Dot<T>(n, n));
+    vec3Scale<T>(inv, n);
 
     // Compute the dot product with
-    T an = vec3Dot(axis, n);
+    T an = vec3Dot<T>(axis, n);
 
     // Check if ref axis is parallel with normal
     if (abs(TacsRealPart(an)) > 1.0 - SMALL_NUM) {
@@ -148,12 +148,12 @@ class TACSShellRefAxisTransform : public TACSShellTransform {
     t1[2] = axis[2] - an * n[2];
 
     // Normalize the new direction
-    inv = 1.0 / sqrt(vec3Dot(t1, t1));
-    vec3Scale(inv, t1);
+    inv = 1.0 / sqrt(vec3Dot<T>(t1, t1));
+    vec3Scale<T>(inv, t1);
 
     // Take the cross product to determine the 2-direction
     T t2[3];
-    crossProduct(n, t1, t2);
+    crossProduct<T>(n, t1, t2);
 
     /*
         // Compute the transformation

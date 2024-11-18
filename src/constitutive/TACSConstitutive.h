@@ -330,6 +330,10 @@ class TACSConstitutive : public TACSObject {
                           const TacsScalar X[], const TacsScalar strain[],
                           TacsScalar stress[]) = 0;
 
+  template <typename T>
+  __DEVICE__ void evalStress_kernel(int elemIndex, const T pt[], const T X[],
+                  const T strain[], T stress[]) {};
+
   /**
     Compute the tangent stiffness matrix
 

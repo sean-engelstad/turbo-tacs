@@ -30,7 +30,7 @@ class TACSShellLinearModel {
     @param d The interpolated director field
   */
   template <typename T, int vars_per_node, class basis>
-  static void computeTyingStrain(const T Xpts[], const T fn[],
+  __HOST_DEVICE__ static void computeTyingStrain(const T Xpts[], const T fn[],
                                  const T vars[], const T d[],
                                  T ety[]) {
     for (int index = 0; index < basis::NUM_TYING_POINTS; index++) {
@@ -77,7 +77,7 @@ class TACSShellLinearModel {
   }
 
   template <typename T, int vars_per_node, class basis>
-  static void addComputeTyingStrainTranspose(
+  __HOST_DEVICE__ static void addComputeTyingStrainTranspose(
       const T Xpts[], const T fn[], const T vars[],
       const T d[], const T dety[], T res[],
       T dd[]) {
@@ -437,8 +437,9 @@ class TACSShellLinearModel {
     Evaluate the strain as a function of the displacement derivatives
     and interpolated strain from the tensorial components
   */
-  static inline void evalStrain(const TacsScalar u0x[], const TacsScalar u1x[],
-                                const TacsScalar e0ty[], TacsScalar e[]) {
+  template <typename T>
+  static __HOST_DEVICE__ void evalStrain(const T u0x[], const T u1x[],
+                                const T e0ty[], T e[]) {
     // Evaluate the in-plane strains from the tying strain expressions
     e[0] = e0ty[0];
     e[1] = e0ty[3];
@@ -457,11 +458,12 @@ class TACSShellLinearModel {
   /**
     Evaluate the derivative of the strain
   */
-  static inline void evalStrainSens(const TacsScalar scale,
-                                    const TacsScalar dfde[],
-                                    const TacsScalar u0x[],
-                                    const TacsScalar u1x[], TacsScalar du0x[],
-                                    TacsScalar du1x[], TacsScalar de0ty[]) {
+  template <typename T>
+  __HOST_DEVICE__ static void evalStrainSens(const T scale,
+                                    const T dfde[],
+                                    const T u0x[],
+                                    const T u1x[], T du0x[],
+                                    T du1x[], T de0ty[]) {
     // Evaluate the in-plane strains from the tying strain expressions
     de0ty[0] = scale * dfde[0];
     de0ty[1] = 2.0 * scale * dfde[2];
@@ -641,7 +643,7 @@ class TACSShellNonlinearModel {
     @param d The interpolated director field
   */
   template <typename T, int vars_per_node, class basis>
-  static void computeTyingStrain(const T Xpts[], const T fn[],
+  __HOST_DEVICE__ static void computeTyingStrain(const T Xpts[], const T fn[],
                                  const T vars[], const T d[],
                                  T ety[]) {
     for (int index = 0; index < basis::NUM_TYING_POINTS; index++) {
@@ -697,7 +699,7 @@ class TACSShellNonlinearModel {
   }
 
   template <typename T, int vars_per_node, class basis>
-  static void addComputeTyingStrainTranspose(
+  __HOST_DEVICE__ static void addComputeTyingStrainTranspose(
       const T Xpts[], const T fn[], const T vars[],
       const T d[], const T dety[], T res[],
       T dd[]) {
@@ -1134,10 +1136,11 @@ class TACSShellNonlinearModel {
   /**
     Evaluate the derivative of the strain
   */
-  static void evalStrainSens(const TacsScalar scale, const TacsScalar dfde[],
-                             const TacsScalar u0x[], const TacsScalar u1x[],
-                             TacsScalar du0x[], TacsScalar du1x[],
-                             TacsScalar de0ty[]) {
+  template <typename T>
+  __HOST_DEVICE__ static void evalStrainSens(const T scale, const T dfde[],
+                             const T u0x[], const T u1x[],
+                             T du0x[], T du1x[],
+                             T de0ty[]) {
     // Evaluate the in-plane strains from the tying strain expressions
     de0ty[0] = scale * dfde[0];
     de0ty[1] = 2.0 * scale * dfde[2];

@@ -92,6 +92,31 @@ class TACSShellConstitutive : public TACSConstitutive {
                                    const TacsScalar drill, const TacsScalar e[],
                                    TacsScalar s[]);
 
+  template <typename T>
+  __DEVICE__ void computeStress_kernel(
+      const T A[], const T B[], const T D[],
+      const T As[], const T drill, const T e[],
+      T s[]) {
+    s[0] = A[0] * e[0] + A[1] * e[1] + A[2] * e[2] + B[0] * e[3] + B[1] * e[4] +
+          B[2] * e[5];
+    s[1] = A[1] * e[0] + A[3] * e[1] + A[4] * e[2] + B[1] * e[3] + B[3] * e[4] +
+          B[4] * e[5];
+    s[2] = A[2] * e[0] + A[4] * e[1] + A[5] * e[2] + B[2] * e[3] + B[4] * e[4] +
+          B[5] * e[5];
+
+    s[3] = B[0] * e[0] + B[1] * e[1] + B[2] * e[2] + D[0] * e[3] + D[1] * e[4] +
+          D[2] * e[5];
+    s[4] = B[1] * e[0] + B[3] * e[1] + B[4] * e[2] + D[1] * e[3] + D[3] * e[4] +
+          D[4] * e[5];
+    s[5] = B[2] * e[0] + B[4] * e[1] + B[5] * e[2] + D[2] * e[3] + D[4] * e[4] +
+          D[5] * e[5];
+
+    s[6] = As[0] * e[6] + As[1] * e[7];
+    s[7] = As[1] * e[6] + As[2] * e[7];
+
+    s[8] = drill * e[8];
+  }
+
   // The name of the constitutive object
   const char *getObjectName();
 

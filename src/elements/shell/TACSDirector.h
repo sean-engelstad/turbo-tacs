@@ -22,7 +22,7 @@ class TACSLinearizedRotation {
     @param C The rotation matrices at each point
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void computeRotationMat(const T vars[], T C[]) {
+  __HOST_DEVICE__ static void computeRotationMat(const T vars[], T C[]) {
     const T *q = &vars[offset];
     for (int i = 0; i < num_nodes; i++) {
       // C = I - q^{x}
@@ -76,7 +76,7 @@ class TACSLinearizedRotation {
     @param res The residual array
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void addRotationMatResidual(const T vars[],
+  __HOST_DEVICE__ static void addRotationMatResidual(const T vars[],
                                      const T dC[], T res[]) {
     T *r = &res[offset];
 
@@ -184,7 +184,7 @@ class TACSLinearizedRotation {
     The linearized rotation class is unconstrained
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void addRotationConstraint(const T vars[], T res[]) {
+  __HOST_DEVICE__ static void addRotationConstraint(const T vars[], T res[]) {
   }
 
   template <int vars_per_node, int offset, int num_nodes>
@@ -207,7 +207,7 @@ class TACSLinearizedRotation {
     @param dddot The second time derivative of the director
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const T vars[],
+  __HOST_DEVICE__ static void computeDirectorRates(const T vars[],
                                    const T dvars[],
                                    const T t[], T d[],
                                    T ddot[]) {
@@ -238,7 +238,7 @@ class TACSLinearizedRotation {
     @param d The director values
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const T vars[],
+  __HOST_DEVICE__ static void computeDirectorRates(const T vars[],
                                    const T t[], T d[]) {
     const T *q = &vars[offset];
     for (int i = 0; i < num_nodes; i++) {
@@ -267,7 +267,7 @@ class TACSLinearizedRotation {
     @param dddot The second time derivative of the director
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void computeDirectorRates(const T vars[],
+  __HOST_DEVICE__ static void computeDirectorRates(const T vars[],
                                    const T dvars[],
                                    const T ddvars[],
                                    const T t[], T d[],
@@ -371,7 +371,7 @@ class TACSLinearizedRotation {
     @param res The output residual
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void addDirectorResidual(const T vars[],
+  __HOST_DEVICE__ static void addDirectorResidual(const T vars[],
                                   const T dvars[],
                                   const T ddvars[],
                                   const T t[], const T dd[],
@@ -391,7 +391,7 @@ class TACSLinearizedRotation {
    add shorter version of addDirectorResidual for static only case
   */
   template <typename T, int vars_per_node, int offset, int num_nodes>
-  static void addDirectorResidual(const T vars[],
+  __HOST_DEVICE__ static void addDirectorResidual(const T vars[],
                                   const T t[], const T dd[],
                                   T res[]) {
     T *r = &res[offset];
@@ -601,14 +601,14 @@ class TACSLinearizedRotation {
   }
 
   template <typename T>
-  static T evalDrillStrain(const T u0x[],
+  __HOST_DEVICE__ static T evalDrillStrain(const T u0x[],
                                     const T Ct[]) {
     // Compute the rotational penalty
     return T(0.5) * (Ct[3] + u0x[3] - Ct[1] - u0x[1]);
   }
 
   template <typename T>
-  static void evalDrillStrainSens(T scale, const T u0x[],
+  __HOST_DEVICE__ static void evalDrillStrainSens(T scale, const T u0x[],
                                   const T Ct[], T du0x[],
                                   T dCt[]) {
     dCt[0] = 0.0;
@@ -632,7 +632,7 @@ class TACSLinearizedRotation {
     du0x[8] = 0.0;
   }
 
-  static TacsScalar evalDrillStrainDeriv(const TacsScalar u0x[],
+  __HOST_DEVICE__ static TacsScalar evalDrillStrainDeriv(const TacsScalar u0x[],
                                          const TacsScalar Ct[],
                                          const TacsScalar u0xd[],
                                          const TacsScalar Ctd[],
@@ -734,7 +734,7 @@ class TACSQuadraticRotation {
     @param res The residual array
   */
   template <int vars_per_node, int offset, int num_nodes>
-  static void addRotationMatResidual(const TacsScalar vars[],
+  __HOST_DEVICE__ static void addRotationMatResidual(const TacsScalar vars[],
                                      const TacsScalar dC[], TacsScalar res[]) {
     const TacsScalar *q = &vars[offset];
     TacsScalar *r = &res[offset];
@@ -877,7 +877,7 @@ class TACSQuadraticRotation {
     The quadratic rotation matrix is unconstrained
   */
   template <int vars_per_node, int offset, int num_nodes>
-  static void addRotationConstraint(const TacsScalar vars[], TacsScalar res[]) {
+  __HOST_DEVICE__ static void addRotationConstraint(const TacsScalar vars[], TacsScalar res[]) {
   }
 
   template <int vars_per_node, int offset, int num_nodes>
@@ -1472,13 +1472,13 @@ class TACSQuadraticRotation {
   }
 
   template <typename T>
-  static TacsScalar evalDrillStrain(const T u0x[],
+  __HOST_DEVICE__ static TacsScalar evalDrillStrain(const T u0x[],
                                     const T Ct[]) {
     // Compute the rotational penalty
     return 0.5 * (Ct[3] + u0x[3] - Ct[1] - u0x[1]);
   }
 
-  static void evalDrillStrainSens(TacsScalar scale, const TacsScalar u0x[],
+  __HOST_DEVICE__ static void evalDrillStrainSens(TacsScalar scale, const TacsScalar u0x[],
                                   const TacsScalar Ct[], TacsScalar du0x[],
                                   TacsScalar dCt[]) {
     dCt[0] = 0.0;
@@ -1502,7 +1502,7 @@ class TACSQuadraticRotation {
     du0x[8] = 0.0;
   }
 
-  static TacsScalar evalDrillStrainDeriv(const TacsScalar u0x[],
+  __HOST_DEVICE__ static TacsScalar evalDrillStrainDeriv(const TacsScalar u0x[],
                                          const TacsScalar Ct[],
                                          const TacsScalar u0xd[],
                                          const TacsScalar Ctd[],
@@ -1757,7 +1757,7 @@ class TACSQuaternionRotation {
   }
 
   template <int vars_per_node, int offset, int num_nodes>
-  static void addRotationConstraint(const TacsScalar vars[], TacsScalar res[]) {
+  __HOST_DEVICE__ static void addRotationConstraint(const TacsScalar vars[], TacsScalar res[]) {
     const TacsScalar *q = &vars[offset];
     TacsScalar *r = &res[offset];
     for (int i = 0; i < num_nodes; i++) {

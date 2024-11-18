@@ -53,6 +53,20 @@ class TACSAssembler;
         }                                                             \
     }
 
+  #define cudaCheckError() {                                                    \
+      cudaError_t e=cudaGetLastError();                                         \
+      if(e!=cudaSuccess) {                                                     \
+          printf("CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(e)); \
+          exit(EXIT_FAILURE);                                                  \
+      }                                                                        \
+  }
+
+
+  #include "TACSAssembler.cuh"
+
+  // need to import all element types (in this case just shell elements)
+  // #include "elements/shell/TACSShellElementDefs.h"
+
 #endif // __CUDACC__
 
 /*
@@ -230,10 +244,195 @@ class TACSAssembler : public TACSObject {
   // Residual and Jacobian assembly
   // ------------------------------
   void assembleRes(TACSBVec *residual, const TacsScalar lambda = 1.0);
-  void assembleJacobian(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-                        TACSBVec *residual, TACSMat *A,
+
+  // template <class ElemType>
+  // void assembleJacobian(TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
+  //                       TACSBVec *residual, TACSMat *A,
+  //                       MatrixOrientation matOr = TACS_MAT_NORMAL,
+  //                       const TacsScalar lambda = 1.0);
+  /**
+    Assemble the Jacobian matrix
+
+    This function assembles the global Jacobian matrix and
+    residual. This Jacobian includes the contributions from all
+    elements. The Dirichlet boundary conditions are applied to the
+    matrix by zeroing the rows of the matrix associated with a boundary
+    condition, and setting the diagonal to unity. The matrix assembly
+    also performs any communication required so that the matrix can be
+    used immediately after assembly.
+
+    @param alpha Coefficient for the variables
+    @param beta Coefficient for the time-derivative terms
+    @param gamma Coefficientfor the second time derivative term
+    @param residual The residual of the governing equations
+    @param A The Jacobian matrix
+    @param matOr the matrix orientation NORMAL or TRANSPOSE
+    @param lambda Scaling factor for the aux element contributions, by default 1
+  */
+  template <class ElemType>
+  void assembleJacobian(TacsScalar alpha, TacsScalar beta, TacsScalar gamma, 
+                        TACSBVec *residual, TACSMat *A, 
                         MatrixOrientation matOr = TACS_MAT_NORMAL,
-                        const TacsScalar lambda = 1.0);
+                        const TacsScalar lambda = 1.0) {
+
+    #ifdef __CUDACC__
+      // GPU version of assembleJacobian
+
+      // printf("assemble jacobian in GPU\n");
+      
+      // get serial versions of residual, matrix out of here on the host
+      TacsScalar *h_residual, *h_matrix;
+
+      // TODO : for each different type of element
+      // get the unique class / typedef with a new method getTacsElementType or something
+      // then we need to call the static __device__ addJacobian_kernel method with it
+      // using T = Quad4Shell; // not doing this for now
+
+      // for each elemType (iterate over list of typedefs and list of the element objects) 
+      // , if different element types (for now assume all same type)
+
+      // TODO : make this more formal to compute optimal launch parameters for this element
+      // figure out how many threads and blocks to launch for this element
+
+      // product of dim3 block can't go over 1024
+      const int elemPerBlock = 1024 / 24 / 4; // TODO : figure out what the best number is here
+      dim3 block(elemPerBlock, 24,4); // threads per block
+      dim3 grid((numElements + block.x-1) / block.x); // just 1D grid for now with remaining elements
+      // printf("launching kernel with grid <<<%d>>> and block <<<%d,%d,%d>>>\n", grid.x, block.x, block.y, block.z);
+
+      // TODO : later instead of templating by ElemType (import all element types and organize elements
+      // into element type groups then call template ElemType for each group of elements I guess).
+
+      // assume all device data such as xpts, vars, connectivity is already updated from design change, etc.
+      // launch a kernel after passing in the device data already on GPU
+      // TODO : should this be templated by launch params instead?
+      assembleJacobian_kernel<elemPerBlock, ElemType> <<<grid, block>>>(
+        time, alpha, beta, gamma, 
+        d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
+        numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
+        h_residual, h_matrix, matOr
+      );
+
+      // assembleJacobian_kernel<elemPerBlock, ElemType> <<<1, 1>>>(
+      //   time, alpha, beta, gamma, 
+      //   d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
+      //   numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
+      //   h_residual, h_matrix, matOr
+      // );
+
+      // myTestKernel<TacsScalar> <<<1, 64>>> ();
+      // myTestKernel<TacsScalar> <<<1, block>>> ();
+
+      // printf("done launching the kernel\n");
+      // check CUDA necessary to catch launch kernel failures
+      CHECK_CUDA(cudaDeviceSynchronize());
+      // cudaDeviceReset();
+
+      // send data back to BVec's ?
+      // apply BCs?
+
+    #else
+      // CPU code
+
+      // Zero the residual and the matrix
+      if (residual) {
+        residual->zeroEntries();
+      }
+      A->zeroEntries();
+
+      // Run the p-threaded version of the assembly code
+      if (thread_info->getNumThreads() > 1) {
+        // Set the number of completed elements to zero
+        numCompletedElements = 0;
+        tacsPInfo->assembler = this;
+        tacsPInfo->res = residual;
+        tacsPInfo->mat = A;
+        tacsPInfo->alpha = alpha;
+        tacsPInfo->beta = beta;
+        tacsPInfo->gamma = gamma;
+        tacsPInfo->lambda = lambda;
+        tacsPInfo->matOr = matOr;
+
+        // Create the joinable attribute
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+        for (int k = 0; k < thread_info->getNumThreads(); k++) {
+          pthread_create(&threads[k], &attr, TACSAssembler::assembleJacobian_thread,
+                        (void *)tacsPInfo);
+        }
+
+        // Join all the threads
+        for (int k = 0; k < thread_info->getNumThreads(); k++) {
+          pthread_join(threads[k], NULL);
+        }
+
+        // Destroy the attribute
+        pthread_attr_destroy(&attr);
+      } else {
+        // Retrieve pointers to temporary storage
+        TacsScalar *vars, *dvars, *ddvars, *elemRes, *elemXpts;
+        TacsScalar *elemWeights, *elemMat;
+        getDataPointers(elementData, &vars, &dvars, &ddvars, &elemRes, &elemXpts,
+                        NULL, &elemWeights, &elemMat);
+
+        for (int i = 0; i < numElements; i++) {
+          int ptr = elementNodeIndex[i];
+          int len = elementNodeIndex[i + 1] - ptr;
+          const int *nodes = &elementTacsNodes[ptr];
+          xptVec->getValues(len, nodes, elemXpts);
+          varsVec->getValues(len, nodes, vars);
+          dvarsVec->getValues(len, nodes, dvars);
+          ddvarsVec->getValues(len, nodes, ddvars);
+
+          // Get the number of variables from the element
+          int nvars = elements[i]->getNumVariables();
+
+          // debug set vars to nonzero
+          // for (int i1 = 0; i1 < 24; i1++) {
+          //   vars[i1] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+          //   // printf("vars[%d] = %.8e\n", i1, vars[i1]);
+          // }
+
+          // Compute and add the contributions to the Jacobian
+          memset(elemRes, 0, nvars * sizeof(TacsScalar));
+          memset(elemMat, 0, nvars * nvars * sizeof(TacsScalar));
+          elements[i]->addJacobian(i, time, alpha, beta, gamma, elemXpts, vars,
+                                  dvars, ddvars, elemRes, elemMat);
+
+          // end debug
+          // exit(0);
+
+          if (residual) {
+            residual->setValues(len, nodes, elemRes, TACS_ADD_VALUES);
+          }
+          addMatValues(A, i, elemMat, elementIData, elemWeights, matOr);
+        }
+      }
+
+      // Do any matrix and residual assembly if required
+      A->beginAssembly();
+      if (residual) {
+        residual->beginSetValues(TACS_ADD_VALUES);
+      }
+
+      A->endAssembly();
+      if (residual) {
+        residual->endSetValues(TACS_ADD_VALUES);
+      }
+
+      // Apply the boundary conditions
+      if (residual) {
+        residual->applyBCs(bcMap, varsVec);
+      }
+
+      // Apply the appropriate boundary conditions
+      A->applyBCs(bcMap);
+
+    #endif
+  }
+
   void assembleMatType(ElementMatrixType matType, TACSMat *A,
                        MatrixOrientation matOr = TACS_MAT_NORMAL,
                        const TacsScalar lambda = 1.0);
@@ -416,10 +615,10 @@ class TACSAssembler : public TACSObject {
   #ifdef __CUDACC__
 
     // GPU storage data on device (private)
-    TACSElement **d_elements;
-    TacsScalar *d_varsVec, *d_dvarsVec, *d_ddvarsVec;
-    TacsScalar *d_xptVec;
-    int *d_elementNodeIndex, *d_elementTacsNodes;
+    TACSElement **d_elements = nullptr;
+    TacsScalar *d_varsVec = nullptr, *d_dvarsVec = nullptr, *d_ddvarsVec = nullptr;
+    TacsScalar *d_xptVec = nullptr;
+    int *d_elementNodeIndex = nullptr, *d_elementTacsNodes = nullptr;
 
   #endif // __CUDACC__
 
@@ -543,146 +742,5 @@ inline void TACSAssembler::addMatValues(TACSMat *A, const int elemNum,
     A->addWeightValues(nnodes, varp, vars, weights, nvars, nvars, mat, matOr);
   }
 }
-
-// GPU kernels (outside class def)
-#ifdef __CUDACC__
-
-// debugging test kernel
-template <typename T>
-__global__ void myTestKernel() {
-  int ithread = threadIdx.z * blockDim.x * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x;
-  // if (ithread < 1) {
-  //   printf("threadIdx (%d, %d, %d)\n", threadIdx.x, threadIdx.y, threadIdx.z);
-  // }
-  printf("threadIdx (%d, %d, %d)\n", threadIdx.x, threadIdx.y, threadIdx.z);
-}
-
-// these methods must be defined in header file because CUDA
-// doesn't handle templated kernel functions in .cpp file (must be explicitly defined there)
-
-// maybe this should be templated here.. maybe not; what should be templates (the launch params?), template <class ElemType>
-template <int elemPerBlock>
-__global__ void assembleJacobian_kernel(
-    double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
-    TacsScalar *d_xpts, TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
-    int numElements, TACSElement **d_elements, int *d_elementNodeIndex, int *d_elementTacsNodes,
-    TacsScalar *residual, TacsScalar *A, MatrixOrientation matOr) {
-
-    // assumes that ElemType is the true element type here not TACSElement
-    // so no dynamic polymorphism problems (because GPUs don't do dynamic determination of methods)
-    
-    // TODO : get these from the element class on this kernel
-    const int vars_per_node = 6;
-    const int nodes_per_elem = 4;
-    const int dof_per_elem = vars_per_node * nodes_per_elem; // = 24 here
-    const int nderivs = dof_per_elem;
-
-    // this may be over limit of data stored on each block (seems to have run but may be spilling over data to each thread)
-    // note only 48 KB or 6000 doubles of shared memory storable per block
-    __shared__ TacsScalar block_vars[elemPerBlock][dof_per_elem];
-    __shared__ TacsScalar block_dvars[elemPerBlock][dof_per_elem];
-    __shared__ TacsScalar block_ddvars[elemPerBlock][dof_per_elem];
-    __shared__ TacsScalar block_Xpts[elemPerBlock][3*nodes_per_elem];
-    __shared__ TacsScalar block_res[elemPerBlock][dof_per_elem];
-    __shared__ TacsScalar block_mat[elemPerBlock][dof_per_elem * dof_per_elem];
-    __shared__ TACSElement *block_elements;
-
-    // TODO : copy global data into the above shared memory
-    // want to ensure that shared data copy is distributed among blocks / threads
-    // TODO : generalize this part if # elements exceeds grid size? 
-    
-    // distribute the copy among some # of threads
-    // https://forums.developer.nvidia.com/t/copying-data-from-global-memory-to-shared-memory-by-each-thread/9498/5
-    
-    // temp commented out this section
-    int ithread = threadIdx.z * blockDim.x * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x;
-    int full_dim = blockDim.x * blockDim.y * blockDim.z;
-    int global_ithread = full_dim * blockIdx.x + ithread;
-    int ielem = ithread; // shared memory ielem
-
-    if (global_ithread < 1) {
-      printf("thread %d before the global to shared memory transfer\n", ithread);
-    }
-
-    // global memory ielem value
-    // int global_ielem = blockDim.x * blockIdx.x + ielem;
-    // if (ithread < elemPerBlock && global_ielem < numElements) {
-    //   // copy one element's data over from global to shared memory (no for loop!)
-    //   // int elemOffset = elementsPerBlock * blockIdx.z;
-      
-    //   int ptr = d_elementNodeIndex[global_ielem];   // says the starting node for this elem
-    //   int len = d_elementNodeIndex[global_ielem+1] - ptr; // just says how many nodes are on this element I believe (bunch of integers)
-    //   const int *nodes = &d_elementTacsNodes[ptr];
-
-    //   // loop over each of the nodes in the element
-    //   for (int inode = 0; inode < len; inode++) {
-    //     int global_node = nodes[inode];
-    //     // here we do the main data copying.. (do a deep copy or less than that..)
-    //     // I guess do a deep copy for now
-    //     for (int ivar = 0; ivar < vars_per_node; ivar++) {
-    //       int idof = vars_per_node*inode + ivar;
-    //       int global_idof = vars_per_node * global_node + ivar;
-    //       // any potential speedup here?
-    //       block_vars[ielem][idof] = d_vars[global_idof];
-    //       block_dvars[ielem][idof] = d_dvars[global_idof];
-    //       block_ddvars[ielem][idof] = d_ddvars[global_idof];
-    //     } // end of ivar for loop
-
-    //     // TODO : use spatial_dim arg here
-    //     for (int idim = 0; idim < 3; idim++) {
-    //       int ixpt = 3 * inode + idim; 
-    //       int global_ixpt = 3 * inode + idim;
-    //       block_Xpts[ielem][ixpt] = d_xpts[global_ixpt];
-    //     }
-
-    //   } // end of inode for loop
-
-    //   // copy element object to shared memory
-    //   block_elements[ielem] = *d_elements[global_ielem];
-
-    // }  // end of ithread check if statement
-
-    // // once each thread is done copying global to shared data
-    // __syncthreads(); 
-
-    if (global_ithread < 1) {
-      printf("thread %d after shared mem transfer and before kelem kernel\n", ithread);
-    }
-
-    // loop over gauss points and derivative pass
-    // potentially should change this to Kevin's way of (x,y,z) are (ideriv, igauss, ielement)
-    // but doesn't that way have 
-
-    int32_t local_element = threadIdx.x;
-    int32_t local_gauss = threadIdx.z;
-    int32_t loop_bound = blockDim.x * (nderivs + blockDim.x - 1) / blockDim.x; // effectively ceil function here on nderivs
-
-    // TODO : double check this logic on ideriv...(seems like this only runs one thread for each dim)
-
-    // temp commented out..
-    // for (int32_t ideriv = threadIdx.y; ideriv < loop_bound; ideriv += blockDim.x ) {
-    //     bool active_thread = local_element < elemPerBlock && ideriv < nderivs;
-    //     if (!active_thread) continue;
-
-    //     block_elements[local_element].addJacobian_kernel(
-    //         ideriv, local_gauss,
-    //         time, alpha, beta, gamma,
-    //         block_Xpts[local_element], block_vars[local_element], block_dvars[local_element], block_ddvars[local_element],
-    //         block_res[local_element], block_mat[local_element]
-    //     );
-    // }
-
-    if (global_ithread < 1) {
-      printf("thread %d after kelem computation\n", ithread);
-    }
-
-    // now do assembly process and atomicAdds from elements in each block to global matrix assembly?
-
-    // TODO : now send shared memory back to global memory for element residual and jacobian?
-    // atomicAdd here back into global memory?
-
-}
-
-#endif // __CUDACC__
 
 // #endif  // TACS_ASSEMBLER_H

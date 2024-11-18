@@ -925,6 +925,7 @@ void TACSAssembler::setNodes(TACSBVec *X) {
     // copy to device
     size_t nnodesBytes = 3 * numNodes * sizeof(TacsScalar);
     cudaMemcpy(d_xptVec, h_xptVec, nnodesBytes, cudaMemcpyHostToDevice);
+    cudaCheckError();
 
   #endif
 }
@@ -4094,176 +4095,7 @@ void TACSAssembler::assembleRes(TACSBVec *residual, const TacsScalar lambda) {
   residual->applyBCs(bcMap, varsVec);
 }
 
-/**
-  Assemble the Jacobian matrix
-
-  This function assembles the global Jacobian matrix and
-  residual. This Jacobian includes the contributions from all
-  elements. The Dirichlet boundary conditions are applied to the
-  matrix by zeroing the rows of the matrix associated with a boundary
-  condition, and setting the diagonal to unity. The matrix assembly
-  also performs any communication required so that the matrix can be
-  used immediately after assembly.
-
-  @param alpha Coefficient for the variables
-  @param beta Coefficient for the time-derivative terms
-  @param gamma Coefficientfor the second time derivative term
-  @param residual The residual of the governing equations
-  @param A The Jacobian matrix
-  @param matOr the matrix orientation NORMAL or TRANSPOSE
-  @param lambda Scaling factor for the aux element contributions, by default 1
-*/
-void TACSAssembler::assembleJacobian(TacsScalar alpha, TacsScalar beta,
-                                     TacsScalar gamma, TACSBVec *residual,
-                                     TACSMat *A, MatrixOrientation matOr,
-                                     const TacsScalar lambda) {
-
-  #ifdef __CUDACC__
-    // GPU version of assembleJacobian
-
-    printf("assemble jacobian in GPU\n");
-    
-    // get serial versions of residual, matrix out of here on the host
-    TacsScalar *h_residual, *h_matrix;
-
-    // TODO : for each different type of element
-    // get the unique class / typedef with a new method getTacsElementType or something
-    // then we need to call the static __device__ addJacobian_kernel method with it
-    // using T = Quad4Shell; // not doing this for now
-
-    // for each elemType (iterate over list of typedefs and list of the element objects) 
-    // , if different element types (for now assume all same type)
-
-    // TODO : make this more formal to compute optimal launch parameters for this element
-    // figure out how many threads and blocks to launch for this element
-
-    // product of dim3 block can't go over 1024
-    const int elemPerBlock = 1024 / 24 / 4; // TODO : figure out what the best number is here
-    dim3 block(elemPerBlock, 24,4); // threads per block
-    dim3 grid((numElements + block.x-1) / block.x); // just 1D grid for now with remaining elements
-    printf("launching kernel with grid <<<%d>>> and block <<<%d,%d,%d>>>\n", grid.x, block.x, block.y, block.z);
-
-    // assume all device data such as xpts, vars, connectivity is already updated from design change, etc.
-    // launch a kernel after passing in the device data already on GPU
-    // TODO : should this be templated by launch params instead?
-    assembleJacobian_kernel<elemPerBlock> <<<grid, block>>>(
-      time, alpha, beta, gamma, 
-      d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
-      numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
-      h_residual, h_matrix, matOr
-    );
-
-    // myTestKernel<TacsScalar> <<<1, 64>>> ();
-    // myTestKernel<TacsScalar> <<<1, block>>> ();
-
-    printf("done launching the kernel\n");
-    // check CUDA necessary to catch launch kernel failures
-    CHECK_CUDA(cudaDeviceSynchronize());
-    // cudaDeviceReset();
-
-    // send data back to BVec's ?
-
-  #else
-    // CPU code
-
-    // Zero the residual and the matrix
-    if (residual) {
-      residual->zeroEntries();
-    }
-    A->zeroEntries();
-
-    // Run the p-threaded version of the assembly code
-    if (thread_info->getNumThreads() > 1) {
-      // Set the number of completed elements to zero
-      numCompletedElements = 0;
-      tacsPInfo->assembler = this;
-      tacsPInfo->res = residual;
-      tacsPInfo->mat = A;
-      tacsPInfo->alpha = alpha;
-      tacsPInfo->beta = beta;
-      tacsPInfo->gamma = gamma;
-      tacsPInfo->lambda = lambda;
-      tacsPInfo->matOr = matOr;
-
-      // Create the joinable attribute
-      pthread_attr_t attr;
-      pthread_attr_init(&attr);
-      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-      for (int k = 0; k < thread_info->getNumThreads(); k++) {
-        pthread_create(&threads[k], &attr, TACSAssembler::assembleJacobian_thread,
-                      (void *)tacsPInfo);
-      }
-
-      // Join all the threads
-      for (int k = 0; k < thread_info->getNumThreads(); k++) {
-        pthread_join(threads[k], NULL);
-      }
-
-      // Destroy the attribute
-      pthread_attr_destroy(&attr);
-    } else {
-      // Retrieve pointers to temporary storage
-      TacsScalar *vars, *dvars, *ddvars, *elemRes, *elemXpts;
-      TacsScalar *elemWeights, *elemMat;
-      getDataPointers(elementData, &vars, &dvars, &ddvars, &elemRes, &elemXpts,
-                      NULL, &elemWeights, &elemMat);
-
-      for (int i = 0; i < numElements; i++) {
-        int ptr = elementNodeIndex[i];
-        int len = elementNodeIndex[i + 1] - ptr;
-        const int *nodes = &elementTacsNodes[ptr];
-        xptVec->getValues(len, nodes, elemXpts);
-        varsVec->getValues(len, nodes, vars);
-        dvarsVec->getValues(len, nodes, dvars);
-        ddvarsVec->getValues(len, nodes, ddvars);
-
-        // Get the number of variables from the element
-        int nvars = elements[i]->getNumVariables();
-
-        // debug set vars to nonzero
-        // for (int i1 = 0; i1 < 24; i1++) {
-        //   vars[i1] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-        //   // printf("vars[%d] = %.8e\n", i1, vars[i1]);
-        // }
-
-        // Compute and add the contributions to the Jacobian
-        memset(elemRes, 0, nvars * sizeof(TacsScalar));
-        memset(elemMat, 0, nvars * nvars * sizeof(TacsScalar));
-        elements[i]->addJacobian(i, time, alpha, beta, gamma, elemXpts, vars,
-                                dvars, ddvars, elemRes, elemMat);
-
-        // end debug
-        // exit(0);
-
-        if (residual) {
-          residual->setValues(len, nodes, elemRes, TACS_ADD_VALUES);
-        }
-        addMatValues(A, i, elemMat, elementIData, elemWeights, matOr);
-      }
-    }
-
-    // Do any matrix and residual assembly if required
-    A->beginAssembly();
-    if (residual) {
-      residual->beginSetValues(TACS_ADD_VALUES);
-    }
-
-    A->endAssembly();
-    if (residual) {
-      residual->endSetValues(TACS_ADD_VALUES);
-    }
-
-    // Apply the boundary conditions
-    if (residual) {
-      residual->applyBCs(bcMap, varsVec);
-    }
-
-    // Apply the appropriate boundary conditions
-    A->applyBCs(bcMap);
-
-  #endif
-}
+// assembleJacobian now defined in the header due to issues with templating..
 
 /**
   Assemble a matrix of a specified type. Note that all matrices
@@ -4601,37 +4433,47 @@ void TACSAssembler::getAverageStresses(ElementType elem_type,
 
 void TACSAssembler::allocateDeviceData() {
   
+  cudaDeviceSynchronize();
+
   // now do allocate and copy from host to device for variables
   size_t nvars = varsPerNode * numNodes * sizeof(TacsScalar);
-  cudaMalloc((TacsScalar**)&d_varsVec, nvars);
+  cudaMalloc((void**)&d_varsVec, varsPerNode * numNodes * sizeof(TacsScalar));
   cudaMemset(d_varsVec, 0.0, nvars);
+  cudaCheckError();
 
-  cudaMalloc((TacsScalar**)&d_dvarsVec, nvars);
+  cudaMalloc((void**)&d_dvarsVec, nvars);
   cudaMemset(d_dvarsVec, 0.0, nvars);
+  cudaCheckError();
 
-  cudaMalloc((TacsScalar**)&d_ddvarsVec, nvars);
+  cudaMalloc((void**)&d_ddvarsVec, nvars);
   cudaMemset(d_ddvarsVec, 0.0, nvars);
-
-  // now allocate and copy host to device for mesh
-
-  size_t nxptsBytes = 3 * numNodes * sizeof(TacsScalar);
-  cudaMalloc((TacsScalar**)&d_xptVec, nxptsBytes);
-  cudaMemset(d_xptVec, 0.0, nxptsBytes);
-  setNodes(xptVec);
+  cudaCheckError();
 
   // is polymorphism a problem here? will TACSShellElement have different size?
-  size_t nelemsBytes = numElements * sizeof(TACSElement);
-  cudaMalloc((TACSElement**)&d_elements, nelemsBytes);
+  size_t nelemsBytes = numElements * sizeof(TACSElement*);
+  cudaMalloc((void**)&d_elements, nelemsBytes);
   cudaMemcpy(d_elements, elements, nelemsBytes, cudaMemcpyHostToDevice);
+  cudaCheckError();
+
+  // now allocate and copy host to device for mesh
+  // nodes copy is done in setNodes()
+  cudaMalloc((void**)&d_xptVec, 3 * numNodes * sizeof(TacsScalar));
+  cudaMemset(d_xptVec, 0.0, 3 * numNodes * sizeof(TacsScalar));
+  cudaCheckError();
 
   size_t nnodesBytes = (numElements + 1) * sizeof(int);
-  cudaMalloc((int**)&d_elementNodeIndex, nnodesBytes);
+  cudaMalloc((void**)&d_elementNodeIndex, nnodesBytes);
   cudaMemcpy(d_elementNodeIndex, elementNodeIndex, nnodesBytes, cudaMemcpyHostToDevice);
+  cudaCheckError();
   
   int size = elementNodeIndex[numElements];
   size_t connBytes = size * sizeof(int);
-  cudaMalloc((int**)&d_elementTacsNodes, connBytes);
+  cudaMalloc((void**)&d_elementTacsNodes, connBytes);
   cudaMemcpy(d_elementTacsNodes, elementTacsNodes, connBytes, cudaMemcpyHostToDevice);
+  cudaCheckError();
+
+  // ensure no additional errors here
+  cudaDeviceSynchronize();
 
 }
 

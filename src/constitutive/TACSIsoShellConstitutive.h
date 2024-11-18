@@ -72,9 +72,50 @@ class TACSIsoShellConstitutive : public TACSShellConstitutive {
 
   int symind(int irow, int icol, int N);
 
-  // Evaluate the stresss
+  // Evaluate the stress
   void evalStress(int elemIndex, const double pt[], const TacsScalar X[],
                   const TacsScalar strain[], TacsScalar stress[]);
+
+  
+  // Evaluate the stress
+  template <typename T>
+  __DEVICE__ void evalStress_kernel(
+        int elemIndex, const T pt[],
+        const T X[], const T e[],
+        T s[]) {
+    if (properties) {
+      T A[6], B[6], D[6], As[3], drill;
+
+      // Compute the tangent stiffness matrix
+      properties->evalTangentStiffness2D_kernel<T>(A);
+
+      // The bending-stretch coupling matrix is zero in this case
+      B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
+
+      // Scale the in-plane matrix and bending stiffness
+      // matrix by the appropriate quantities
+      T I = t * t * t / 12.0;
+      for (int i = 0; i < 6; i++) {
+        D[i] = I * A[i];
+        A[i] *= t;
+        B[i] += -tOffset * t * A[i];
+        D[i] += tOffset * tOffset * t * t * A[i];
+      }
+
+      // Set the through-thickness shear stiffness
+      As[0] = As[2] = (5.0 / 6.0) * A[5];
+      As[1] = 0.0;
+
+      drill = 0.5 * DRILLING_REGULARIZATION * (As[0] + As[2]);
+
+      // Evaluate the stress
+      computeStress_kernel<T>(A, B, D, As, drill, e, s);
+    } else {
+      s[0] = s[1] = s[2] = 0.0;
+      s[3] = s[4] = s[5] = 0.0;
+      s[6] = s[7] = s[8] = 0.0;
+    }
+  }
                   
   // compute the ABD matrix
   template <typename T>
