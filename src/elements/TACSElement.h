@@ -769,8 +769,10 @@ class TACSElement : public TACSObject {
   #ifdef __CUDACC__
   // GPU kernels
   // doesn't support virtual kernel functions (can we do dynamic polymorphism)
+  template <class Transform, class Constitutive>
   __device__ void addStaticJacobian_kernel(
     int ideriv, int igauss,
+    Transform *transform, Constitutive *constitutive,
     double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
     const TacsScalar Xpts[], const TacsScalar vars[],
     TacsScalar *res, TacsScalar *mat

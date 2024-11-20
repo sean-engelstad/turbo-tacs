@@ -269,7 +269,7 @@ class TACSAssembler : public TACSObject {
     @param matOr the matrix orientation NORMAL or TRANSPOSE
     @param lambda Scaling factor for the aux element contributions, by default 1
   */
-  template <class ElemType>
+  template <class ElemType, class Transform, class Constitutive>
   void assembleJacobian(TacsScalar alpha, TacsScalar beta, TacsScalar gamma, 
                         TACSBVec *residual, TACSMat *A, 
                         MatrixOrientation matOr = TACS_MAT_NORMAL,
@@ -306,19 +306,19 @@ class TACSAssembler : public TACSObject {
       // assume all device data such as xpts, vars, connectivity is already updated from design change, etc.
       // launch a kernel after passing in the device data already on GPU
       // TODO : should this be templated by launch params instead?
-      assembleJacobian_kernel<elemPerBlock, ElemType> <<<grid, block>>>(
-        time, alpha, beta, gamma, 
-        d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
-        numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
-        h_residual, h_matrix, matOr
-      );
-
-      // assembleJacobian_kernel<elemPerBlock, ElemType> <<<1, 1>>>(
+      // assembleJacobian_kernel<elemPerBlock, ElemType> <<<grid, block>>>(
       //   time, alpha, beta, gamma, 
       //   d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
       //   numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
       //   h_residual, h_matrix, matOr
       // );
+
+      assembleJacobian_kernel<elemPerBlock, ElemType, Transform, Constitutive> <<<1, 1>>>(
+        time, alpha, beta, gamma, 
+        d_xptVec, d_varsVec, d_dvarsVec, d_ddvarsVec, 
+        numElements, d_elements, d_elementNodeIndex, d_elementTacsNodes,
+        h_residual, h_matrix, matOr
+      );
 
       // myTestKernel<TacsScalar> <<<1, 64>>> ();
       // myTestKernel<TacsScalar> <<<1, block>>> ();

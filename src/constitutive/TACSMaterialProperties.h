@@ -134,37 +134,37 @@ class TACSMaterialProperties : public TACSObject {
                                          TacsScalar sens[]);
 
  private:
-  MaterialType mat_type;
+  __HOST_DEVICE__ MaterialType mat_type;
 
   // Density
-  TacsScalar rho;
+  __HOST_DEVICE__ TacsScalar rho;
 
   // Specific heat
-  TacsScalar specific_heat;
+  __HOST_DEVICE__ TacsScalar specific_heat;
 
   // Isotropic properties
-  TacsScalar E, nu, G;  // Modulus and Poisson ratio
+  __HOST_DEVICE__ TacsScalar E, nu, G;  // Modulus and Poisson ratio
 
   // Coefficient of thermal expansion
-  TacsScalar alpha;
+  __HOST_DEVICE__ TacsScalar alpha;
 
   // Yield stress value
-  TacsScalar ys;
+  __HOST_DEVICE__ TacsScalar ys;
 
   // Thermal conductivity coefficient
-  TacsScalar kappa;
+  __HOST_DEVICE__ TacsScalar kappa;
 
   // The orthotropic material properties
-  TacsScalar E1, E2, E3, nu12, nu13, nu23, G12, G13, G23;
+  __HOST_DEVICE__ TacsScalar E1, E2, E3, nu12, nu13, nu23, G12, G13, G23;
 
   // The strength coefficients
-  TacsScalar T1, C1, T2, C2, T3, C3, S12, S13, S23;
+  __HOST_DEVICE__ TacsScalar T1, C1, T2, C2, T3, C3, S12, S13, S23;
 
   // The thermal coefficients of expansion
-  TacsScalar alpha1, alpha2, alpha3;
+  __HOST_DEVICE__ TacsScalar alpha1, alpha2, alpha3;
 
   // Thermal conductivity coefficients along each axis
-  TacsScalar kappa1, kappa2, kappa3;
+  __HOST_DEVICE__ TacsScalar kappa1, kappa2, kappa3;
 };
 
 /*

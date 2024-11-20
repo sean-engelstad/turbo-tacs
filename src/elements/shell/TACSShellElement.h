@@ -95,6 +95,12 @@ class TACSShellElement : public TACSElement {
   void setTemperature(TacsScalar _temp) {temperature = _temp;}
   TacsScalar getTemperature() { return temperature; }
 
+  template <class Transform>
+  __HOST_DEVICE__ Transform* getTransform() {return static_cast<Transform*>(transform);}
+
+  template <class Constitutive>
+  __HOST_DEVICE__ Constitutive* getConstitutive() {return static_cast<Constitutive*>(con);}
+
   ElementLayout getLayoutType() { return basis::getLayoutType(); }
 
   ElementType getElementType() { return TACS_BEAM_OR_SHELL_ELEMENT; }
@@ -207,8 +213,10 @@ class TACSShellElement : public TACSElement {
   // GPU code
   #ifdef __CUDACC__
 
+    template <class Transform, class Constitutive>
     __device__ void addStaticJacobian_kernel(
       int ideriv, int igauss,
+      Transform *transform, Constitutive *constitutive,
       double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
       const TacsScalar Xpts[], const TacsScalar vars[],
       TacsScalar res[], TacsScalar mat[]
@@ -821,9 +829,11 @@ void TACSShellElement<quadrature, basis, director, model>::addJacobian(
 // or maybe each warp will do one of 24 columns of Kelem for same element and some fraction
 // of the gauss indices and we will do it that way..
 template <class quadrature, class basis, class director, class model>
+template <class Transform, class Constitutive>
 __device__
 void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_kernel(
   int ideriv, int igauss,
+  Transform *transform, Constitutive *constitutive,
   double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
   const TacsScalar Xpts[], const TacsScalar vars[],
   TacsScalar* res, TacsScalar *mat
@@ -843,12 +853,13 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
   // NOTE : took out dynamics for now since can't go over 255 doubles per thread (so only doing statics)
   // TODO : write Telem (dynamic stiffness matrix computation on separate kernel?)
   T U[N], resA2D[N], XptsAD[3*num_nodes];
-  // comment out kinetic energy section for now (since too many doubles per thread used maybe)
   // T dU[N], ddU[N];
 
   // TODO : check Kinetic energy part works too
   for (int ivar = 0; ivar < N; ivar++) {
-    U[ivar].value = vars[ivar];
+    U[ivar] = T(vars[ivar]);
+    resA2D[ivar] = T(0.0);
+    // printf("U[%d] = %.8f, deriv = %.8f\n", ivar, U[ivar].value, U[ivar].deriv[0]);
   }
   // instead of if statement in for loop, do this to prevent branch statement problems which would
   // slow down the thread
@@ -857,38 +868,61 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
   
   for (int inode = 0; inode < 3 * num_nodes; inode++) {
     XptsAD[inode] = T(Xpts[inode]);
+    // printf("Xpts[%d] = %.8f, deriv = %.8f\n", inode, XptsAD[inode].value, XptsAD[inode].deriv[0]);
   }
 
   // Derivative of the director field and matrix at each 
   T dd[dsize];
+  for (int i = 0; i < dsize; i++) {
+    dd[i] = T(0.0);
+  }
 
   // TODO : make some of these TacsScalar and not T type to remove amount of data on the thread later
   // TODO : check if we can directly mix between T and TacsScalar type
 
-  // TODO : need to make all of these __host__ __device__ functions in TacsUtilities, etc.
-
   // Compute the node normal directions
   T fn[3 * num_nodes], Xdn[9 * num_nodes];
   TacsShellComputeNodeNormals<T, basis>(XptsAD, fn, Xdn);
+  
+  // for (int inode = 0; inode < 3 * num_nodes; inode++) {
+  //   printf("fn[%d] = %.8f, deriv = %.8f\n", inode, fn[inode].value, fn[inode].deriv[0]);
+  //   printf("Xdn[%d] = %.8f, deriv = %.8f\n", inode, Xdn[inode].value, Xdn[inode].deriv[0]);
+  // }
 
   // Compute the drill strain penalty at each node
   T etn[num_nodes], detn[num_nodes];
+  for (int inode = 0; inode < num_nodes; inode++) {
+    detn[inode] = T(0.0);
+  }
 
   // Store information about the transformation and derivatives at each node for
   // the drilling degrees of freedom
   // TODO : may want to also do interpolation in this method as well to reduce load on each thread..
   T XdinvTn[9 * num_nodes], Tn[9 * num_nodes];
   T u0xn[9 * num_nodes], Ctn[csize];
-  TacsShellComputeDrillStrain<T, vars_per_node, offset, basis, director, model>(
+  TacsShellComputeDrillStrain_kernel<T, vars_per_node, offset, basis, director, model, Transform>(
       transform, Xdn, fn, U, XdinvTn, Tn, u0xn, Ctn, etn);
+
+  // for (int inode = 0; inode < num_nodes; inode++) {
+  //   printf("etn[%d] = %.8f, deriv = %.8f\n", inode, etn[inode].value, etn[inode].deriv[0]);
+  // }
 
   T d[dsize];
   // T ddot[dsize], dddot[dsize]; // comment out for just static part to reduce load on each thread
   director::template computeDirectorRates<T, vars_per_node, offset, num_nodes>(U, fn, d);
 
+  // for (int i = 0; i < dsize; i++) {
+  //   printf("d[%d] = %.8f, deriv = %.8f\n", i, d[i].value, d[i].deriv[0]);
+  // }
+
   // Compute the tying strain values
   T ety[basis::NUM_TYING_POINTS], dety[basis::NUM_TYING_POINTS];
   model::template computeTyingStrain<T, vars_per_node, basis>(XptsAD, fn, U, d, ety);
+
+  // for (int i = 0; i < basis::NUM_TYING_POINTS; i++) {
+  //   printf("ety[%d] = %.8f, deriv = %.8f\n", i, ety[i].value, ety[i].deriv[0]);
+  // }
+  // return;
 
   // beginning of what was gauss pt loop
   // ------------------------------------
@@ -900,6 +934,10 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
   T pt[3];
   T weight = quadrature::template getQuadraturePoint<T>(igauss, pt);
 
+  // for (int ipt = 0; ipt < 3; ipt++) {
+  //   printf("ipt[%d] = %.8e\n", ipt, pt[ipt].value);
+  // }
+
   // Compute X, X,xi and the interpolated normal n0
   T X[3], Xxi[6], n0[3], Tmat[9], et;
   basis::template interpFields<T, 3, 3>(pt, XptsAD, X);
@@ -907,8 +945,19 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
   basis::template interpFields<T, 3, 3>(pt, fn, n0);
   basis::template interpFields<T, 1, 1>(pt, etn, &et);
 
+  // for (int i = 0; i < 6; i++) {
+  //   printf("Xxi[%d] = %.8e\n", i, Xxi[i].value);
+  // }
+
   // Compute the transformation at the quadrature point
-  transform->computeTransform<T>(Xxi, n0, Tmat);
+  // for (int i = 0; i < 9; i++) {
+  //   Tmat[i] = T(0.0);
+  // }
+  transform->template computeTransform<T>(Xxi, n0, Tmat);
+
+  // for (int i = 0; i < 9; i++) {
+  //   printf("Tmat[%d] = %.8e\n", i, Tmat[i].value);
+  // }
 
   // Evaluate the displacement gradient at the point
   T XdinvT[9], XdinvzT[9];
@@ -917,53 +966,123 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
       pt, XptsAD, U, fn, d, Xxi, n0, Tmat, XdinvT, XdinvzT, u0x, u1x);
   detXd *= weight;
 
+  // for (int i = 0; i < 9; i++) {
+  //   printf("u0x[%d] = %.8e, deriv = %.8e\n", i, u0x[i].value, u0x[i].deriv[0]);
+  //   printf("u1x[%d] = %.8e, deriv = %.8e\n", i, u1x[i].value, u1x[i].deriv[0]);
+  // }
+
   // Evaluate the tying components of the strain
   T gty[6];  // The symmetric components of the tying strain
   basis::template interpTyingStrain<T>(pt, ety, gty);
 
+  // for (int i = 0; i < 6; i++) {
+  //   printf("ety[%d] = %.8e\n", i, ety[i].value);
+  // }
+
   // Compute the symmetric parts of the tying strain
   T e0ty[6];  // e0ty = XdinvT^{T}*gty*XdinvT
   mat3x3SymmTransformTranspose<T>(XdinvT, gty, e0ty);
+
+  // for (int i = 0; i < 6; i++) {
+  //   printf("e0ty[%d] = %.8e\n", i, e0ty[i].value);
+  // }
 
   // Compute the set of strain components
   T e[9];  // The components of the strain
   model::template evalStrain<T>(u0x, u1x, e0ty, e);
   e[8] = et;
 
+  // for (int i = 0; i < 9; i++) {
+  //   printf("e[%d] = %.8e\n", i, e[i].value);
+  // }
+
   // Compute the corresponding stresses
   T s[9];
-  con->evalStress_kernel<T>(0, pt, X, e, s);
+  for (int i = 0; i < 9; i++) {
+    s[i] = 0.0; // initialize stress
+  }
+  // this is not working right now.. need to change this somehow, can't access properties
+  // constitutive->template evalStress_kernel<T>(0, pt, X, e, s);
+  // maybe get ABD matrix to do this?
+
+  for (int i = 0; i < 9; i++) {
+    printf("s[%d] = %.8e, deriv = %.8e\n", i, s[i].value, s[i].deriv[0]);
+  }
 
   // Compute the derivative of the product of the stress and strain
   // with respect to u0x, u1x and e0ty
   T du0x[9], du1x[9], de0ty[6];
+  for (int i = 0; i < 9; i++) {
+    du0x[i] = du1x[i] = de0ty[i] = T(0.0);
+  }
+
   model::template evalStrainSens<T>(detXd, s, u0x, u1x, du0x, du1x, de0ty);
+
+  // printf("detXd = %.8e\n", detXd);
+  // for (int i = 0; i < 9; i++) {
+  //   printf("du0x[%d] = %.8e\n", i, du0x[i].value);
+  //   printf("du1x[%d] = %.8e\n", i, du1x[i].value);
+  //   printf("de0ty[%d] = %.8e\n", i, de0ty[i].value);
+  // }
 
   // Add the contribution to the drilling strain
   T det = detXd * s[8];
   basis::template addInterpFieldsTranspose<T, 1, 1>(pt, &det, detn);
 
+  // printf("det = %.8e\n", det.value);
+  // for (int inode = 0; inode < num_nodes; inode++) {
+  //   printf("detn[%d] = %.8e\n", inode, detn[inode].value);
+  // }
+
   // Add the contributions to the residual from du0x, du1x and dCt
   TacsShellAddDispGradSens<T, vars_per_node, basis>(pt, Tmat, XdinvT, XdinvzT, du0x,
                                                   du1x, resA2D, dd);
+
+  // for (int i = 0; i < 9; i++) {
+  //   printf("resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  //   printf("dd[%d] = %.8e\n", i, dd[i].value);
+  // }
 
   // Compute the of the tying strain w.r.t. derivative w.r.t. the coefficients
   T dgty[6];
   mat3x3SymmTransformTransSens<T>(XdinvT, de0ty, dgty);
 
+  // for (int i = 0; i < 6; i++) {
+  //   printf("dgty[%d] = %.8e\n", i, dgty[i].value);
+  // }
+
   // Evaluate the tying strain
+  for (int i = 0; i < 6; i++) {
+    dety[i] = T(0.0);
+  }
   basis::template addInterpTyingStrainTranspose<T>(pt, dgty, dety);
+
+  // for (int i = 0; i < 6; i++) {
+  //   printf("dety[%d] = %.8e\n", i, dety[i].value);
+  // }
   
   } // scope block for local variables
   // end of what was the gauss pt loop call (now done outside kernel)
+
+  // for (int i = 0; i < N; i++) {
+  //   printf("0 - resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  // }
 
   // Add the contribution to the residual from the drill strain
   TacsShellAddDrillStrainSens<T, vars_per_node, offset, basis, director, model>(
       Xdn, fn, U, XdinvTn, Tn, u0xn, Ctn, detn, resA2D);
 
+  // for (int i = 0; i < N; i++) {
+  //   printf("1 - resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  // }
+
   // Add the contributions from the tying strain
   model::template addComputeTyingStrainTranspose<T, vars_per_node, basis>(
       XptsAD, fn, U, d, dety, resA2D, dd);
+
+  // for (int i = 0; i < N; i++) {
+  //   printf("2 - resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  // }
 
   // Add the contributions to the director field
   // director::template addDirectorResidual<T, vars_per_node, offset, num_nodes>(
@@ -971,10 +1090,18 @@ void TACSShellElement<quadrature, basis, director, model>::addStaticJacobian_ker
   director::template addDirectorResidual<T, vars_per_node, offset, num_nodes>(
       U, fn, dd, resA2D);
 
+  // for (int i = 0; i < N; i++) {
+  //   printf("3 - resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  // }
+
   // Add the contribution from the rotation constraint (defined by the
   // rotational parametrization) - if any
   director::template addRotationConstraint<T, vars_per_node, offset, num_nodes>(
       U, resA2D);
+
+  // for (int i = 0; i < N; i++) {
+  //   printf("4 - resA2D[%d] = %.8e\n", i, resA2D[i].value);
+  // }
   
   // res[0] = 0.0;
   // return; // debug

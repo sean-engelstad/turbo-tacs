@@ -9,6 +9,9 @@
 // enum TacsShellTyingStrainComponent not defined
 #include "TACSShellElementQuadBasis.h"
 
+// temp import
+#include "adscalar.h"
+
 class TACSShellLinearModel {
  public:
   /**
@@ -471,6 +474,13 @@ class TACSShellLinearModel {
     de0ty[3] = scale * dfde[1];
     de0ty[4] = 2.0 * scale * dfde[6];
     de0ty[5] = 0.0;
+
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   T temp = scale * dfde[0];
+    //   printf("de0ty[0] %.8e = scale %.8e * dfde[0] %.8e\n", de0ty[0].value, scale.value, dfde[0].value);
+    //   printf("temp = %.8e\n", temp.value);
+    // }
+    
 
     du0x[0] = 0.0;
     du0x[1] = 0.0;

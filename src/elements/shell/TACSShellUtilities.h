@@ -4,6 +4,9 @@
 #include "TACSElementAlgebra.h"
 #include "TACSElementVerification.h"
 #include "TACSShellElementTransform.h"
+#include <type_traits>
+
+#include "adscalar.h"
 
 template <typename T>
 __HOST_DEVICE__ inline void TacsShellAssembleFrame(const T Xxi[], const T n[], T Xd[]) {
@@ -310,9 +313,19 @@ __HOST_DEVICE__ void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
     T pt[2];
     basis::template getNodePoint<T>(i, pt);
 
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   for (int j= 0; j < 2; j++) {
+    //     printf("pt[%d] = %.8f\n", j, pt[j].value);
+    //   }
+
+    //   for (int inode = 0; inode < 3; inode++) {
+    //     printf("Xpts[%d] = %.8f\n", inode, Xpts[inode].value);
+    //   }
+    // }
+
     // Compute the derivative X,xi at each node
     T Xxi[6];
-    basis::template interpFieldsGrad<T,3, 3>(pt, Xpts, Xxi);
+    basis::template interpFieldsGrad<T, 3, 3>(pt, Xpts, Xxi);
 
     T a[3], b[3];
     a[0] = Xxi[0];
@@ -326,6 +339,15 @@ __HOST_DEVICE__ void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
     // Compute the normal direction at the point
     crossProduct<T>(a, b, &fn[3 * i]);
 
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   for (int j = 0; j < 6; j++) {
+    //     printf("Xxi[%d] = %.8f\n", j, Xxi[j].value);
+    //   }
+    //   for (int j = 0; j < 3; j++) {
+    //     printf("fn[%d] = %.8f\n", j, fn[3*i+j].value);
+    //   }
+    // }
+
     // Compute the 2-norm of the vector in the normal direction
     T norm = sqrt(vec3Dot<T>(&fn[3 * i], &fn[3 * i]));
 
@@ -333,6 +355,17 @@ __HOST_DEVICE__ void TacsShellComputeNodeNormals(const T Xpts[], T fn[],
     if (fnorm) {
       fnorm[i] = norm;
     }
+
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   // T temp = vec3Dot<T>(&fn[3 * i], &fn[3 * i]);
+    //   // T mynorm = sqrt(temp);
+    //   T temp(2.0);
+    //   T mynorm = sqrt(temp);
+    //   // T mynorm = A2D::sqrt(temp);
+    //   printf("temp = %.8f\n", temp.value);
+    //   printf("norm = %.8f\n", mynorm.value);
+    //   return;
+    // }
 
     // Scale the normal direction
     if (norm != 0.0) {
@@ -709,7 +742,66 @@ __HOST_DEVICE__ void TacsShellComputeDrillStrain(TACSShellTransform *transform,
     // Compute the transformation at the node
     T Xxi[6];
     TacsShellExtractFrame<T>(&Xdn[9 * i], Xxi);
-    transform->computeTransform<T>(Xxi, &fn[3 * i], &Tn[9 * i]);
+    transform->template computeTransform<T>(Xxi, &fn[3 * i], &Tn[9 * i]);
+
+    // Compute the field gradient at the node
+    T u0xi[6];
+    basis::template interpFieldsGrad<T, vars_per_node, 3>(pt, vars, u0xi);
+
+    // Compute the inverse transformation
+    T Xdinv[9];
+    inv3x3<T>(&Xdn[9 * i], Xdinv);
+
+    // Compute XdinvT = Xdinv*T
+    mat3x3MatMult<T>(Xdinv, &Tn[9 * i], &XdinvTn[9 * i]);
+    TacsShellAssembleFrame<T>(u0xi, &u0xn[9 * i]);  // Use u0x to store [u0,xi; 0]
+
+    // Compute the rotation matrix at this node
+    T C[9], tmp[9];
+    director::template computeRotationMat<T, vars_per_node, offset, 1>(
+        &vars[vars_per_node * i], C);
+
+    // Compute Ct = T^{T}*C*T
+    mat3x3TransMatMult(&Tn[9 * i], C, tmp);
+    mat3x3MatMult<T>(tmp, &Tn[9 * i], &Ctn[9 * i]);
+
+    // Compute the transformation u0x = T^{T}*ueta*Xdinv*T
+    // u0x = T^{T}*u0d*Xdinv*T
+    mat3x3MatMult<T>(&u0xn[9 * i], &XdinvTn[9 * i], tmp);
+    mat3x3TransMatMult<T>(&Tn[9 * i], tmp, &u0xn[9 * i]);
+
+    etn[i] = director::template evalDrillStrain<T>(&u0xn[9 * i], &Ctn[9 * i]);
+  }
+}
+
+/**
+  Compute the drilling strain penalty at each node
+
+  @param transform Transformation object
+  @param Xdn The frame derivatives at each node
+  @param fn The frame normals at each node
+  @param vars The state variable values
+  @param XdinvTn Computed inverse frame times transformation at each node
+  @param Tn The transformation at each node
+  @param u0xn The derivative of the displacements at each node
+  @param Ctn The rotation matrix at each node
+  @param etn The drill strain penalty value at each node
+*/
+template <typename T, int vars_per_node, int offset, class basis, class director,
+          class model, class Transform>
+__HOST_DEVICE__ void TacsShellComputeDrillStrain_kernel(Transform *transform,
+                                 const T Xdn[], const T fn[],
+                                 const T vars[], T XdinvTn[],
+                                 T Tn[], T u0xn[],
+                                 T Ctn[], T etn[]) {
+  for (int i = 0; i < basis::NUM_NODES; i++) {
+    T pt[2];
+    basis::template getNodePoint<T>(i, pt);
+
+    // Compute the transformation at the node
+    T Xxi[6];
+    TacsShellExtractFrame<T>(&Xdn[9 * i], Xxi);
+    transform->template computeTransform<T>(Xxi, &fn[3 * i], &Tn[9 * i]);
 
     // Compute the field gradient at the node
     T u0xi[6];
@@ -841,6 +933,14 @@ __HOST_DEVICE__ void TacsShellAddDrillStrainSens(const T Xdn[], const T fn[],
     T du0x[9], dCt[9];
     director::template evalDrillStrainSens<T>(detn[i], &u0xn[9 * i], &Ctn[9 * i], du0x,
                                   dCt);
+    
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   printf("detn[%d] = %.8e\n", i, detn[i]);
+    //   for (int j = 0; j < 9; j++) {
+    //     printf("Ctn[%d] = %.8e\n", 9*i+j, Ctn[9*i+j].value);
+    //     printf("u0xn[%d] = %.8e\n", 9*i+j, u0xn[9*i+j].value);
+    //   }
+    // }
 
     // Compute dCpt = T*dCt*T^{T}
     T dCpt[9], tmp[9];
@@ -849,6 +949,24 @@ __HOST_DEVICE__ void TacsShellAddDrillStrainSens(const T Xdn[], const T fn[],
 
     director::template addRotationMatResidual<T, vars_per_node, offset, 1>(
         &vars[i * vars_per_node], dCpt, &res[i * vars_per_node]);
+
+    // if constexpr( std::is_same_v<T, A2D::ADScalar<double,1>> ) {
+    //   for (int j = 0; j < 9; j++) {
+    //     printf("TSDG - dCt[%d] = %.8e\n", j, dCt[j].value);
+    //   }
+    //   for (int j = 0; j < 9; j++) {
+    //     printf("TSDG - tmp[%d] = %.8e\n", j, tmp[j].value);
+    //   }
+    //   for (int j = 0; j < 9; j++) {
+    //     printf("TSDG - Tn[%d] = %.8e\n", j, Tn[j].value);
+    //   }
+    //   for (int j = 0; j < 9; j++) {
+    //     printf("TSDG - dCpt[%d] = %.8e\n", j, dCpt[j].value);
+    //   }
+    //   for (int j = 0; j < 24; j++) {
+    //     printf("TSDG - res[%d] = %.8e\n", j, res[j].value);
+    //   }
+    // }
 
     // Compute du0d = T*du0x*XdinvT^{T} + T*du1x*XdinvzT^{T}
     T du0d[9];

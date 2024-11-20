@@ -139,7 +139,7 @@ int main() {
     double t1 = MPI_Wtime();
 
     double alpha = 1.0, beta = 0.0, gamma = 0.0;
-    assembler->assembleJacobian<TACSQuad4Shell>(alpha, beta, gamma, NULL, matrix);
+    assembler->assembleJacobian<TACSQuad4Shell, TACSShellNaturalTransform, TACSIsoShellConstitutive>(alpha, beta, gamma, NULL, matrix);
 
     double t2 = MPI_Wtime();
     double dt = t2 - t1;

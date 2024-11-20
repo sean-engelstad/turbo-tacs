@@ -83,38 +83,44 @@ class TACSIsoShellConstitutive : public TACSShellConstitutive {
         int elemIndex, const T pt[],
         const T X[], const T e[],
         T s[]) {
-    if (properties) {
-      T A[6], B[6], D[6], As[3], drill;
+    T A[6], B[6], D[6], As[3], drill;
 
-      // Compute the tangent stiffness matrix
-      properties->evalTangentStiffness2D_kernel<T>(A);
+    // Compute the tangent stiffness matrix
+    properties->template evalTangentStiffness2D_kernel<T>(A);
+    T temp = A[0];
+    printf("temp = %.8e\n", temp.value);
+    return;
 
-      // The bending-stretch coupling matrix is zero in this case
-      B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
+    // The bending-stretch coupling matrix is zero in this case
+    B[0] = B[1] = B[2] = B[3] = B[4] = B[5] = 0.0;
+    // return;
 
-      // Scale the in-plane matrix and bending stiffness
-      // matrix by the appropriate quantities
-      T I = t * t * t / 12.0;
-      for (int i = 0; i < 6; i++) {
-        D[i] = I * A[i];
-        A[i] *= t;
-        B[i] += -tOffset * t * A[i];
-        D[i] += tOffset * tOffset * t * t * A[i];
-      }
-
-      // Set the through-thickness shear stiffness
-      As[0] = As[2] = (5.0 / 6.0) * A[5];
-      As[1] = 0.0;
-
-      drill = 0.5 * DRILLING_REGULARIZATION * (As[0] + As[2]);
-
-      // Evaluate the stress
-      computeStress_kernel<T>(A, B, D, As, drill, e, s);
-    } else {
-      s[0] = s[1] = s[2] = 0.0;
-      s[3] = s[4] = s[5] = 0.0;
-      s[6] = s[7] = s[8] = 0.0;
+    // Scale the in-plane matrix and bending stiffness
+    // matrix by the appropriate quantities
+    T I = t * t * t / 12.0;
+    for (int i = 0; i < 6; i++) {
+      D[i] = I * A[i];
+      A[i] *= t;
+      B[i] += -tOffset * t * A[i];
+      D[i] += tOffset * tOffset * t * t * A[i];
     }
+    // return;
+
+    printf("t = %.8e\n", t);
+
+    // Set the through-thickness shear stiffness
+    As[0] = As[2] = T(5.0 / 6.0) * A[5];
+    As[1] = 0.0;
+    return;
+
+    // for now set default? need way to set into this method
+    double DRILLING_REGULARIZATION = 10.0;
+    drill = 0.5 * DRILLING_REGULARIZATION * (As[0] + As[2]);
+
+    // return;
+
+    // Evaluate the stress
+    computeStress_kernel<T>(A, B, D, As, drill, e, s);
   }
                   
   // compute the ABD matrix
@@ -171,13 +177,13 @@ class TACSIsoShellConstitutive : public TACSShellConstitutive {
 
  private:
   // Material properties class
-  TACSMaterialProperties *properties;
+  __HOST_DEVICE__ TACSMaterialProperties *properties;
 
   // Store information about the design variable
-  TacsScalar kcorr;  // The shear correction factor
-  TacsScalar t, tlb, tub, tOffset;
-  int tNum;
-  TacsScalar ksWeight;  // ks weight used in failure calc
+  __HOST_DEVICE__ TacsScalar kcorr;  // The shear correction factor
+  __HOST_DEVICE__ TacsScalar t, tlb, tub, tOffset;
+  __HOST_DEVICE__ int tNum;
+  __HOST_DEVICE__ TacsScalar ksWeight;  // ks weight used in failure calc
 
   // The object name
   static const char *constName;

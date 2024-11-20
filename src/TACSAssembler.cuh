@@ -16,7 +16,7 @@ __global__ void myTestKernel() {
 // doesn't handle templated kernel functions in .cpp file (must be explicitly defined there)
 
 // maybe this should be templated here.. maybe not; what should be templates (the launch params?), template <class ElemType>
-template <int elemPerBlock, class ElemType>
+template <int elemPerBlock, class ElemType, class Transform, class Constitutive>
 __global__ void assembleJacobian_kernel(
     double time, TacsScalar alpha, TacsScalar beta, TacsScalar gamma,
     TacsScalar *d_xpts, TacsScalar *d_vars, TacsScalar *d_dvars, TacsScalar *d_ddvars,
@@ -140,45 +140,36 @@ __global__ void assembleJacobian_kernel(
         // temporary res, mat data
         TacsScalar res[dof_per_elem], mat_col[dof_per_elem];
 
+        // get constitutive, transform objects
+        Transform *transform = block_elements[ielem]->template getTransform<Transform>();
+        Constitutive *con = block_elements[ielem]->template getConstitutive<Constitutive>();
+
         // TODO : see if I get race conditions in each element or need atomic add for residual
         // also for mat I can get rows (since sym Kelem) row-based instead to prevent race conditions
         block_elements[local_element]->addStaticJacobian_kernel(
             ideriv, local_gauss,
+            transform, con,
             time, alpha, beta, gamma,
             block_Xpts[local_element], block_vars[local_element],
             &res[0], &mat_col[0]
         );
 
-        // add back into shared memory?
-
-        // &block_res[local_element][0], &block_mat[local_element][dof_per_elem*ideriv]
-
         // if (global_ithread < 1) {
         //   for (int ivar = 0; ivar < 24; ivar++) {
-        //     printf("Kelem[%d,%d] = %.8f\n", ivar, ideriv, block_mat[local_element][24*ivar+ideriv]);
+        //     printf("Kelem[%d,%d] = %.8f\n", ivar, ideriv, mat_col[ivar]);
         //   }          
         // }
     }
 
     __syncthreads();
 
-    // TODO : separate scope for kinetic energy / mass matrix
-    // kinetic energy inputs not included as of right now (include in separate kernel or separate section later or scope)
-    // concerned about amount of data allocated per block and per thread..
-    // __shared__ TacsScalar block_dvars[elemPerBlock][dof_per_elem];
-    // __shared__ TacsScalar block_ddvars[elemPerBlock][dof_per_elem];
+    // TODO : separate kinetic energy loop here
 
-    // would then call kinetic energy / mass matrix kernel here
-    // , block_dvars[local_element], block_ddvars[local_element],
-
-    // if (global_ithread < 1) {
-    //   printf("thread %d after kelem computation\n", ithread);
-    // }
+    if (global_ithread < 1) {
+      printf("thread %d after kelem computation\n", ithread);
+    }
 
     // now do assembly process and atomicAdds from elements in each block to global matrix assembly?
-
-    // TODO : now send shared memory back to global memory for element residual and jacobian?
-    // atomicAdd here back into global memory?
 
 }
 
